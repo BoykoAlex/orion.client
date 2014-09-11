@@ -1,4 +1,4 @@
-/*******************************************************************************
+    /*******************************************************************************
  * @license
  * Copyright (c) 2010, 2012 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
@@ -52,14 +52,14 @@ exports.CompareView = (function() {
 			return delim;
 		},
 		/** @private */
-		_generateMapper: function(input, output, diff , detectConflicts ,doNotBuildNewFile){
+		_generateMapper: function(forceGenerate, input, output, diff , detectConflicts ,doNotBuildNewFile){
 			var delim = this._getLineDelim(input , diff);
 			this._diffParser.setLineDelim(delim);
-			if(this.options.mapper && this.options.toggler){
+			if(this.options.mapper && this.options.toggler && !forceGenerate){
 				return {delim:delim , mapper:this.options.mapper, output: this.options.newFile.Content, diffArray:this.options.diffArray};
 			}
 			if(typeof output === "string" && typeof input === "string"){ //$NON-NLS-1$ //$NON-NLS-0$
-				var adapter = new mJSDiffAdapter.JSDiffAdapter();
+				var adapter = new mJSDiffAdapter.JSDiffAdapter(this.isWhitespaceIgnored());
 				var maps = adapter.adapt(input, output, delim);
 				if(this.options.toggler){
 					this.options.mapper = maps.mapper;
@@ -117,15 +117,24 @@ exports.CompareView = (function() {
 					promises.push(wrapper.highlighter.highlight(wrapper.target.fileName, wrapper.target.contentType, wrapper.target.editor));
 				}.bind(this));
 				Deferred.all(promises, function(error) { return {_error: error}; }).then(function(promises){
-					this._diffNavigator.renderAnnotations();
+					this._diffNavigator.renderAnnotations(this.isWhitespaceIgnored());
 					this._diffNavigator.gotoBlock(this.options.blockNumber-1, this.options.changeNumber-1);
 				}.bind(this));
 			} else {//render all the diff annotations directly
 				window.setTimeout(function () {
-					this._diffNavigator.renderAnnotations();
+					this._diffNavigator.renderAnnotations(this.isWhitespaceIgnored());
 					this._diffNavigator.gotoBlock(this.options.blockNumber-1, this.options.changeNumber-1);
 				}.bind(this), 50);
 			}
+		},
+		
+		isWhitespaceIgnored: function() {
+			return this.getWidget().options.ignoreWhitespace;
+		},
+		
+		ignoreWhitespace: function(ignore) {
+			this.getWidget().options.ignoreWhitespace = ignore;
+			this.getWidget().refresh(true, true);
 		},
 		
 		/**
@@ -524,7 +533,7 @@ exports.TwoWayCompareView = (function() {
 		}
 	};
 	
-	TwoWayCompareView.prototype.refresh = function(refreshEditors){	
+	TwoWayCompareView.prototype.refresh = function(refreshEditors, generateMapper){	
 		if(this._imageMode){
 			if(this.options.commandProvider){
 				this.options.commandProvider.renderCommands(this);
@@ -542,9 +551,9 @@ exports.TwoWayCompareView = (function() {
 		
 		var result;
 		if(typeof output === "string") { //$NON-NLS-0$
-			result = this._generateMapper(input , output, diff , this.options.hasConflicts);
+			result = this._generateMapper(generateMapper, input , output, diff , this.options.hasConflicts);
 		} else {
-			result = this._generateMapper(input , output, diff , this.options.hasConflicts);
+			result = this._generateMapper(generateMapper, input , output, diff , this.options.hasConflicts);
 			output = result.output;
 		}
 		
@@ -715,7 +724,7 @@ exports.InlineCompareView = (function() {
 		}
 	};
 	
-	InlineCompareView.prototype.refresh = function(){
+	InlineCompareView.prototype.refresh = function(refreshEditors, generateMapper){
 		if(this._imageMode){
 			if(this.options.commandProvider){
 				this.options.commandProvider.renderCommands(this);
@@ -731,10 +740,11 @@ exports.InlineCompareView = (function() {
 		var output = this.options.newFile.Content;
 		var diff = this.options.diffContent;
 
-		var result = this._generateMapper(input, output, diff, this.options.hasConflicts, !this.options.toggler);
+		var result = this._generateMapper(generateMapper, input, output, diff, this.options.hasConflicts, !this.options.toggler);
 		if(typeof output !== "string"){ //$NON-NLS-0$
 			output = result.output;
 		}
+		this._mapper = result.mapper;
 		this._textView.getModel().setText(input);
 		//Merge the text with diff 
 		var rFeeder = new mDiffTreeNavigator.inlineDiffBlockFeeder(result.mapper, 1);
@@ -749,6 +759,7 @@ exports.InlineCompareView = (function() {
 		if(this.options.commandProvider){
 			this.options.commandProvider.renderCommands(this);
 		}
+		this.removeRulers();
 		this.addRulers();
 		var drawLine = this._textView.getTopIndex() ;
 		this._textView.redrawLines(drawLine , drawLine+  1 , this._overviewRuler);
@@ -760,6 +771,22 @@ exports.InlineCompareView = (function() {
 	
 	InlineCompareView.prototype.setConflicting =  function(conflicting){	
 		this._conflcit = conflicting;
+	};
+	
+	InlineCompareView.prototype.gotoDiff = function(changeNumber){
+		this._diffNavigator.gotoChangeUsingIndex(changeNumber);
+	};
+	
+	/**
+	 * Scrolls to the specified line and selects
+	 * the characters between start and end.
+	 * @param[in] lineNumber The 0 based line number to reveal.
+	 * @param[in] start The index at which the selection should start.
+	 * @param[in] end The index at which the selection should end.
+	 */
+	InlineCompareView.prototype.gotoLine = function(lineNumber/*zero based*/, start, end){
+		var mergedNumber = mCompareUtils.convertMergedLineNumber(this._mapper, lineNumber);
+		this._editor.onGotoLine(mergedNumber, start, end);
 	};
 	
 	return InlineCompareView;

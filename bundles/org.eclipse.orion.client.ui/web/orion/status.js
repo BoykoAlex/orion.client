@@ -284,8 +284,14 @@ define([
 				node.appendChild(span);
 			} else {
 				// msg is text. parse Markdown-style links
-				var chunks = URLUtil.detectValidURL(msg), msgNode;
-				if (chunks) {
+				var chunks, msgNode;
+				try {
+					chunks = URLUtil.detectValidURL(msg);
+				} catch (e) {
+					// Contained a corrupt URL
+					chunks = [];
+				}
+				if (chunks.length) {
 					msgNode = document.createDocumentFragment();
 					URLUtil.processURLSegments(msgNode, chunks);
 					// All status links open in new window

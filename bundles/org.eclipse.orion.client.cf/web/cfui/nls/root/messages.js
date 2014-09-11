@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @license
- * Copyright (c) 2013 IBM Corporation and others.
+ * Copyright (c) 2013, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -13,8 +13,21 @@
 //NLS_CHARSET=UTF-8
 
 define({
-	'API URL':'API URL',
-	'Manage URL':'Manage URL',
+	'API URL':'API URL:',
+	'Manage URL':'Manage URL:',
 	'Settings':'Settings',
-	'Cloud':'Cloud'
+	'Cloud':'Cloud',
+	'deploy.cf': 'Deploy to Cloud Foundry',
+	'deploy.cf.tooltip': 'Deploy application in cloud.',
+	'deploy.chooseSpace':'Choose Space To Deploy',
+	'deploy.gettingSpaces':'Getting spaces...',
+	'deploy.deploying':'Deploying...',
+	'deploy.org':'Organization:',
+	'deploy.setUpYourCloud':'Set up your Cloud. Go to [Settings](${0}).', // Must be valid Markdown
+	'deploy.user':'User:',
+	'deploy.password':'Password:',
+	'deploy.enterCredentials':'Please enter your Cloud credentials below to authorize deployment.',
+	'deploy.noSpaces':'No spaces found in this organization.',
+	/* ${0} is the CF space, ${1} is the CF organization */
+	'deploy.spaceOrg':'${0} (${1})'
 });

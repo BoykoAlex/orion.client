@@ -110,7 +110,11 @@ define([
 		_initializeCompletion: function() {
 			this._localStorageKey = this._domNodeId + "LocalStorageKey"; //$NON-NLS-0$
 			
-			if (!this._defaultRecentEntryProposalProvider) {
+			var forceShowRecentEntryButton = false;
+			
+			if (this._defaultRecentEntryProposalProvider) {
+				forceShowRecentEntryButton = true;
+			} else {
 				this._defaultRecentEntryProposalProvider = function(uiCallback) {
 					var recentEntryArray = this.getRecentEntryArray();
 					if (!recentEntryArray) {
@@ -120,7 +124,7 @@ define([
 				}.bind(this);
 			}
 			
-			if (!this._onRecentEntryDelete) {
+			if (this._onRecentEntryDelete === undefined) {
 				this._onRecentEntryDelete = function(item, evtTarget) {
 					var recentEntryArray = this.getRecentEntryArray();
 					
@@ -163,7 +167,7 @@ define([
 			}.bind(this)); //$NON-NLS-0$
 
 			var recentEntryArray = this.getRecentEntryArray();
-			if (recentEntryArray && 0 < recentEntryArray.length) {
+			if (forceShowRecentEntryButton || (recentEntryArray && (0 < recentEntryArray.length)) ) {
 				this._showRecentEntryButton();
 			} else {
 				this._hideRecentEntryButton();
@@ -241,9 +245,15 @@ define([
 				}
 				
 				var indexOfElement = this._getIndexOfValue(recentEntryArray, value); //check if a duplicate entry exists
-				if (-1 === indexOfElement) {
-					//no duplicate entry found, add new entry to array
-					recentEntryArray.push({
+				if (0 !== indexOfElement) {
+					// element is either not in array, or not in first position
+					if (-1 !== indexOfElement) {
+						// element is in array, remove it because we want to add it to beginning
+						recentEntryArray.splice(indexOfElement, 1);
+					}
+					
+					//add new entry to beginning of array
+					recentEntryArray.unshift({
 						type: "proposal", //$NON-NLS-0$
 						label: value, 
 						value: value

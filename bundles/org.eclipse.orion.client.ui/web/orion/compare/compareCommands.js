@@ -72,26 +72,39 @@ exports.CompareCommandFactory = (function() {
 				callback : function(data) {
 					data.items.copyToRight();
 			}});
-			var toggle2InlineCommand = new mCommands.Command({
-				tooltip : messages["Switch to unified diff"],
-				name: messages["Unified"],
-				//imageClass : "core-sprite-link", //$NON-NLS-0$
-				id: "orion.compare.toggle2Inline", //$NON-NLS-0$
+			var ignoreWhitespaceCommand = new mCommands.Command({
+				tooltip : messages["IgnoreWhitespaceTooltip"],
+				name: messages["IgnoreWhitespace"],
+				imageClass : "compare-sprite-ignore-whitespace", //$NON-NLS-0$
+				id: "orion.compare.ignoreWhitespace", //$NON-NLS-0$
 				groupId: "orion.compareGroup", //$NON-NLS-0$
+				type: "toggle",
 				visibleWhen: function(item) {
-					return item.options.toggler && item.options.toggler.getWidget().type === "twoWay"; //$NON-NLS-0$
+					var isWhitespaceIgnored = item.isWhitespaceIgnored();
+					ignoreWhitespaceCommand.checked = isWhitespaceIgnored;
+					ignoreWhitespaceCommand.name = isWhitespaceIgnored ? messages["UseWhitespace"] : messages["IgnoreWhitespace"];
+					ignoreWhitespaceCommand.tooltip = isWhitespaceIgnored ? messages["UseWhitespaceTooltip"] :  messages["IgnoreWhitespaceTooltip"];
+					return !item.options.diffContent/* && !item.isWhitespaceIgnored()*/;
 				},
 				callback : function(data) {
-					data.items.options.toggler.toggle();
+					data.items.ignoreWhitespace(ignoreWhitespaceCommand.checked);
 			}});
-			var toggle2TwoWayCommand = new mCommands.Command({
-				tooltip : messages["Switch to side by side diff"],
-				name: messages["Side by side"],
-				//imageClass : "core-sprite-link", //$NON-NLS-0$
-				id: "orion.compare.toggle2TwoWay", //$NON-NLS-0$
+			var toggleInline2WayCommand = new mCommands.Command({
+				tooltip : messages["Switch to unified diff"],
+				name: messages["Unified"],
+				imageClass : "compare-sprite-inline-2way", //$NON-NLS-0$
+				id: "orion.compare.toggleInline2Way", //$NON-NLS-0$
 				groupId: "orion.compareGroup", //$NON-NLS-0$
+				type: "toggle",
 				visibleWhen: function(item) {
-					return item.options.toggler && item.options.toggler.getWidget().type === "inline"; //$NON-NLS-0$
+					if(!item.options.toggler) {
+						return false;
+					}
+					var is2Way = item.options.toggler.getWidget().type === "twoWay";
+					toggleInline2WayCommand.checked = !is2Way;
+					toggleInline2WayCommand.name = is2Way ? messages["Unified"] : messages["Side by side"];
+					toggleInline2WayCommand.tooltip = is2Way ? messages["Switch to unified diff"] :  messages["Switch to side by side diff"];
+					return true;
 				},
 				callback : function(data) {
 					data.items.options.toggler.toggle();
@@ -146,16 +159,15 @@ exports.CompareCommandFactory = (function() {
 			}});
 			commandService.addCommand(copyToLeftCommand);
 			commandService.addCommand(copyToRightCommand);
-			commandService.addCommand(toggle2TwoWayCommand);
-			commandService.addCommand(toggle2InlineCommand);
+			commandService.addCommand(ignoreWhitespaceCommand);
+			commandService.addCommand(toggleInline2WayCommand);
 			commandService.addCommand(nextDiffCommand);
 			commandService.addCommand(prevDiffCommand);
 			commandService.addCommand(nextChangeCommand);
 			commandService.addCommand(prevChangeCommand);
 				
 			// Register command contributions
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.toggle2Inline", 108); //$NON-NLS-0$
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.toggle2TwoWay", 109); //$NON-NLS-0$
+			commandService.registerCommandContribution(commandSpanId, "orion.compare.toggleInline2Way", 108); //$NON-NLS-0$
 			commandService.registerCommandContribution(commandSpanId, "orion.compare.copyToLeft", 110, null, false, new mKeyBinding.KeyBinding(37/*left arrow key*/, true, false, true)); //$NON-NLS-0$
 			commandService.registerCommandContribution(commandSpanId, "orion.compare.copyToRight", 111, null, false, new mKeyBinding.KeyBinding(39/*left arrow key*/, true, false, true)); //$NON-NLS-0$
 			commandService.registerCommandContribution(commandSpanId, "orion.compare.nextDiff", 112, null, false, new mKeyBinding.KeyBinding(40/*down arrow key*/, true)); //$NON-NLS-0$
@@ -167,6 +179,7 @@ exports.CompareCommandFactory = (function() {
 				commandService.registerCommandContribution(commandSpanId, "orion.compare.nextChange", 114, null, true, new mKeyBinding.KeyBinding(40/*down arrow key*/, true, true)); //$NON-NLS-0$
 				commandService.registerCommandContribution(commandSpanId, "orion.compare.prevChange", 115, null, true, new mKeyBinding.KeyBinding(38/*up arrow key*/, true, true)); //$NON-NLS-0$
 			}
+			commandService.registerCommandContribution(commandSpanId, "orion.compare.ignoreWhitespace", 116); //$NON-NLS-0$
 		},
 		
 		renderCommands: function(compareWidget){

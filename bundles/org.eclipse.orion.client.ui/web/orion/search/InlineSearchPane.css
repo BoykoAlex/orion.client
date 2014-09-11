@@ -1,0 +1,363 @@
+@import "../compare/compareView.css";
+
+@import "../globalSearch/globalSearch.css";
+
+@import "../widgets/input/ComboTextInput.css";
+
+.searchResultsWrapperDiv .treeTableRow > td {
+	padding: 3px;
+	overflow: hidden;
+}
+
+.searchResultsWrapperDiv > b {
+	margin-left: 10px;
+}
+
+.searchWrapper {
+	background: whitesmoke;
+	border: 1px solid rgb(222, 222, 222);
+	border-radius: 0 5px 5px 0;
+	display: none;
+	overflow-x: auto; /*allow horiz scrollbar if search pane not wide enough*/
+	position: absolute;
+	top: 0;
+	width: 0;
+	z-index: 100;
+}
+
+.searchWrapperActive {
+	display: block;
+	height: calc(100% - 11px);
+	width: calc(100% - 2px);
+	transition: width 0.2s ease;
+}
+
+.searchOptWrapperDiv {
+	height: 224px;
+	transition: height 0.2s ease;
+}
+
+.replaceModeActive > .searchOptWrapperDiv {
+	height: 262px;
+}
+
+.searchWrapper.searchOptionsHidden > .searchOptWrapperDiv {
+	height: 0;
+	overflow: hidden;
+}
+
+.searchResultsWrapperDiv {
+	height: calc(100% - 220px - 60px); /* subtract height of search options*/
+	width: 100%;
+}
+
+.searchResultsWrapperDiv > div {
+	border-top: 1px solid lightgray;
+	height: 100%;
+	overflow: auto;
+	width: 100%;
+}
+
+.searchResultsWrapperDiv > div > .treetable {
+	background: white;
+	table-layout: fixed;
+}
+
+.searchWrapper.searchOptionsHidden > .searchResultsWrapperDiv{
+	height: calc(100% - 76px);
+}
+
+.replaceModeActive > .searchResultsWrapperDiv {
+	height: calc(100% - 220px - 60px - 38px); /* subtract height of search options and replace box */
+}
+
+.searchWrapper > .comboTextInputWrapper {
+	margin: 5px 10px 0 10px;
+}
+
+.searchWrapper > .searchDismissButton {
+	background-color: rgb(245, 245, 245);
+	border-radius: 0 3px 0 3px;
+	display: none;
+	margin: 0;
+	opacity: 0.7;
+	padding: 4px;
+	position: absolute;
+	right: 0;
+	z-index: 1;
+}
+
+.searchWrapper label {
+	-moz-user-select: -moz-none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.searchWrapper.searchWrapperActive > .searchDismissButton {
+	display: inline-block;
+}
+
+.searchWrapper.searchWrapperActive > .searchDismissButton:hover {
+	opacity: 1;
+}
+
+.replaceWrapper {
+	display: block;
+	max-height: 50px; /* for transition */
+	overflow: visible;
+	transition: max-height 0.2s ease;
+}
+
+.replaceWrapperHidden {
+	max-height: 0; /* for transition */
+	overflow: hidden;
+}
+
+.fileNamePatternsTextInput {
+	min-width: 218px;
+}
+
+.fileNamePatternsHint {
+	color: #777;
+	font-size: 11px;
+	margin: 0 0 2px 0;
+	padding: 0 2px;
+	display: block;
+	opacity: 0;
+	text-align: center;
+	transition: opacity 0.1s ease;
+}
+
+.fileNamePatternsHintVisible {
+	opacity: 1 !important;
+}
+
+.fileNamePatternsInput {
+	margin: 0;
+}
+
+.toggleDisplayLink {
+	display: block;
+	margin: 0;
+}
+
+.toggleDisplayLink.linkHidden {
+	display: none;
+}
+
+.toggleSearchOptionsLink {
+	margin: 5px;
+}
+
+.searchMainOptionBlock {
+	margin: 5px 10px 0 10px;
+}
+
+.searchOptionBlock {
+	margin: 15px 10px;
+	min-width: 254px;
+	width: calc(100% - 20px);
+}
+
+.searchOption {
+	white-space: nowrap;
+}
+
+.oneLine {
+	white-space: nowrap;
+}
+.oneLine .searchOption {
+	display: inline-block;
+	margin-right: 40px;
+}
+.oneLine .searchOption:last-child {
+	margin: 0;
+}
+
+.searchLabel {
+	margin: 1px 0;
+}
+
+.searchCheckboxLabel {
+	vertical-align: middle;
+}
+
+.searchCheckbox {
+	margin: 0 0 0 5px;
+	vertical-align: middle;
+}
+
+.searchScopeInputWrapper {
+	background-color: whitesmoke;
+	border: 1px solid lightgray;
+	border-radius: 3px;
+	display: inline-block;
+	white-space: nowrap;
+}
+
+.searchScopeElementWrapper {
+	display: inline-block;
+	width: 222px;
+}
+
+.searchScopeElement {
+	color: #222;
+	cursor: initial;
+	display: inline-block;
+	font-weight: normal;
+	margin: 0 5px;
+	overflow: hidden;
+	padding: 0;
+	max-width: 100%; /* prevents span from overflowing parent */
+	text-overflow: ellipsis;
+	vertical-align: bottom;
+	white-space: nowrap;
+}
+
+.commandButton.searchScopeSelectButton {
+	border: none;
+	border-left: 1px solid lightgray;
+	border-bottom-left-radius: 0;
+	border-top-left-radius: 0;
+	cursor: pointer;
+	font-size: 12px;
+	margin: 0;
+	padding: 6px;
+	text-transform: none;
+	vertical-align: baseline;
+}
+
+.searchButton > span {
+	font-size: 14px;
+	color: white;
+}
+
+.commandButton.comboTextInputButton.searchButton {
+	background-color: #7fa4c0;
+	padding: 3px 5px 5px 5px;
+}
+
+.commandButton.comboTextInputButton.searchButton.isHidden {
+	padding: 3px 0 5px 0;
+}
+
+.replaceWrapper > .comboTextInputWrapper > .comboTextInputButton {
+	background-color: #7fa4c0;
+	color: white;
+	padding: 7px 10px;
+}
+
+.projectNavSidebarWrapper > .searchWrapperActive {
+	height: calc(100% - 14px);
+}
+
+.fileNameSpan {
+	display: inline-block;
+	font-weight: bold;
+	outline: none;
+	padding: 2px;
+	vertical-align: middle;
+}
+
+.fileParentSpan {
+	color: #666 !important;
+	font-size: 8pt; 
+	font-weight: normal;
+}
+
+.replaceFileNameSpan {
+	color: black;
+	cursor: pointer;
+}
+
+.deleteSearchRowButton {
+	margin-left: 2px !important;
+}
+
+.searchDetailRow {
+	background: white !important;
+}
+
+.navlink.searchDetailLink {
+	vertical-align: baseline;
+}
+
+/* search match occurrences */
+.navlink.searchDetailLink > span > b {
+	color: black;
+	background: #cedce7;
+}
+
+.searchWrapper:not(.searchWrapperActive) > .comboTextInputWrapper > .comboTextInputButton {
+	background-color: white;
+	border-color: white;
+}
+
+.searchWrapper:not(.searchWrapperActive) > .comboTextInputWrapper > .comboTextInputButton > span {
+	color: #aaa;
+}
+
+.searchWrapper > .comboTextInputWrapper > .recentEntryButton {
+	max-width: 25px;
+	transition: max-width 0.2s ease;
+}
+
+.searchWrapper:not(.searchWrapperActive) > .comboTextInputWrapper > .recentEntryButton {
+	max-width: 0;
+}
+
+.searchWrapperActive > .comboTextInputWrapper > .comboTextInputButton {
+	background-color: rgb(221, 221, 221);
+}
+
+.replaceCompareTitleDiv {
+	border: 1px solid lightgray;
+	box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.33);
+	background: white;
+	display: none;
+	font-size: 8pt;
+	font-weight: bold;
+	height: 20px;
+	left: 1px;
+	padding: 3px 10px;
+	position: absolute;
+	top: -19px;
+	z-index: 1;
+}
+
+.replaceCompareTitleDivVisible {
+	display: block;
+}
+
+.replaceCompareDiv {
+	display: none;
+	z-index: 51;
+}
+
+.replaceCompareDivVisible {
+	display: block;
+}
+
+
+.searchResultsTitle {
+	display: inline-block;
+	font-weight: bold;
+	margin: 0;
+	margin-left: 5px;
+	color: #333;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: middle;
+	white-space: nowrap;
+	width: calc(100% - 5px); /*subtract margin to prevent overflow*/
+}
+
+.searchPageActions {
+	display: block;
+	margin: 5px 0;
+}
+
+.searchPageActions > .orionButton > .core-sprite-move-down, .searchPageActions > .orionButton > .core-sprite-move-up {
+	padding-left: 0;
+}

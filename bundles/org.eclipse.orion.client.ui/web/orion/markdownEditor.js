@@ -32,6 +32,7 @@ define([
 	var markedOutputLink = marked.InlineLexer.prototype.outputLink;
 	var imgCount = 0;
 	var markedOptions = marked.parse.defaults;
+	var toggleOrientationCommand;
 	markedOptions.sanitize = true;
 	markedOptions.tables = true;
 
@@ -185,10 +186,8 @@ define([
 							if (!--stack) {
 								break;
 							}
-						} else {
-							/* an in-between token */
-							index = this._advanceIndex(text, tokens[j], index);
 						}
+						index = this._advanceIndex(text, tokens[j], index);
 						j++;
 					}
 
@@ -239,10 +238,8 @@ define([
 							if (!--stack) {
 								break;
 							}
-						} else {
-							/* an in-between token */
-							index = this._advanceIndex(text, tokens[j], index);
 						}
+						index = this._advanceIndex(text, tokens[j], index);
 						j++;
 					}
 
@@ -471,10 +468,10 @@ define([
 		},
 		verifyBlock: function(baseModel, text, block, changeCount) {
 			/*
-			 * The semantics of list descendents are different than non-list-
-			 * descendents, so don't attempt to update at a block level within a list.
+			 * The semantics of list and blockquote descendents are different than top-level
+			 * elements, so don't attempt to update at a block level within a list or blockquote.
 			 */
-			var current = block.parent;
+			var current = block;
 			while (current) {
 				if (current.typeId === "markup.list.markdown" || current.typeId === "markup.quote.markdown") { //$NON-NLS-1$ //$NON-NLS-0$
 					return false;
@@ -626,7 +623,7 @@ define([
 					if (!newElement.id) {
 						newElement.id = current.elementId; /* typical */
 					} else {
-						current.elementId = newElement.id; /* header element */
+						this._renameBlock(current, newElement.id); /* header element */
 					}
 					rootElement.children[0].appendChild(newElement);
 				}
@@ -731,6 +728,7 @@ define([
 						oldBlocksIndex = i + 1;
 
 						this._updateNode(element, newElement.children[0] || newElement);
+						element.id = (newElement.children[0] || newElement).id;
 						break;
 					}
 				}
@@ -743,16 +741,17 @@ define([
 					element = document.createElement("div"); //$NON-NLS-0$
 					this._updateNode(element, newElement);
 					element = element.children[0] || element;
-					if (!element.id) {
-						element.id = current.elementId; /* typical */
-					} else {
-						current.elementId = element.id; /* header element */
-					}
 					if (children.length) {
 						parentElement.insertBefore(element, children[oldBlocksIndex]);
 					} else {
 						parentElement.appendChild(element);
 					}
+				}
+
+				if (!element.id) {
+					element.id = current.elementId; /* typical */
+				} else {
+					this._renameBlock(current, element.id); /* header element */
 				}
 			}.bind(this));
 
@@ -760,6 +759,11 @@ define([
 			for (i = e.old.length - 1; oldBlocksIndex <= i; i--) {
 				parentElement.removeChild(children[i]);
 			}
+		},
+		_renameBlock: function(block, id) {
+			delete this._blocksCache[block.elementId];
+			block.elementId = id;
+			this._blocksCache[id] = block;
 		},
 		_updateMatch: function(match, text, matches, minimumIndex) {
 			match.pattern.regex.lastIndex = minimumIndex;
@@ -784,14 +788,16 @@ define([
 			
 			/* modify the existing node */
 
-			if (newNode.nodeName === "#text") {
+			if (newNode.nodeName === "#text") { //$NON-NLS-0$
 				targetNode.textContent = newNode.textContent;
 				return;
-			} else if (newNode.nodeName === "IMG") {
+			} else if (newNode.nodeName === "IMG") { //$NON-NLS-0$
 				if (targetNode.src !== newNode.src) {
 					targetNode.parentElement.replaceChild(newNode, targetNode);
 					return;
 				}
+			} else if (newNode.nodeName === "TH" || newNode.nodeName === "TD") { //$NON-NLS-1$ //$NON-NLS-0$
+				targetNode.style.textAlign = newNode.style.textAlign;
 			}
 
 			var targetNodesIndex = 0;
@@ -924,7 +930,7 @@ define([
 						link.href = linkURL.href;
 					}
 				} catch(e) {
-					console.log(e); // best effort
+					window.console.log(e); // best effort
 				}				
 			}
 			return markedOutputLink.call(this, cap, link);
@@ -1052,6 +1058,8 @@ define([
 		this._settingsListener = function(e) {
 			var orientation = e.newSettings.splitOrientation === "horizontal" ? mSplitter.ORIENTATION_HORIZONTAL : mSplitter.ORIENTATION_VERTICAL; //$NON-NLS-0$
 			this._splitter.setOrientation(orientation);
+			toggleOrientationCommand.checked = orientation === mSplitter.ORIENTATION_HORIZONTAL;
+
 			/*
 			 * If this is the initial retrieval of these settings then the root
 			 * and splitter elements likely need to have their visibilities updated.
@@ -1162,6 +1170,9 @@ define([
 
 	MarkdownEditor.prototype = Object.create(BaseEditor.prototype);
 	objects.mixin(MarkdownEditor.prototype, /** @lends orion.edit.MarkdownEditor.prototype */ {
+		getPaneOrientation: function() {
+			return this._splitter.getOrientation();
+		},
 		initSourceEditor: function() {
 			var editor = this._editorView.editor;
 			var textView = editor.getTextView();
@@ -1210,7 +1221,7 @@ define([
 			this._rootDiv.appendChild(this._previewWrapperDiv);
 			
 			this._previewDiv = document.createElement("div"); //$NON-NLS-0$
-			this._previewDiv.id = ID_PREVIEW; //$NON-NLS-0$
+			this._previewDiv.id = ID_PREVIEW;
 			this._previewDiv.classList.add("orionMarkdown"); //$NON-NLS-0$
 			this._previewWrapperDiv.appendChild(this._previewDiv);
 
@@ -1233,6 +1244,10 @@ define([
 			}
 
 			BaseEditor.prototype.install.call(this);
+		},
+		togglePaneOrientation: function() {
+			var orientation = this._splitter.getOrientation() === mSplitter.ORIENTATION_VERTICAL ? mSplitter.ORIENTATION_HORIZONTAL : mSplitter.ORIENTATION_VERTICAL;
+			this._splitter.setOrientation(orientation);
 		},
 		uninstall: function() {
 			this._styler.destroy();
@@ -1339,14 +1354,15 @@ define([
 			while (siblingUpdated) {
 				siblingUpdated = false;
 				if (nextSibling) {
-					if (!nextSibling.id.indexOf(ID_PREFIX)) {
+					/* header elements are detected separately because their element id's are generated by marked */
+					if (!nextSibling.id.indexOf(ID_PREFIX) || this._headerTagRegex.test(nextSibling.nodeName)) {
 						return nextSibling;
 					}
 					nextSibling = nextSibling.nextElementSibling;
 					siblingUpdated = true;
 				}
 				if (previousSibling) {
-					if (!previousSibling.id.indexOf(ID_PREFIX)) {
+					if (!previousSibling.id.indexOf(ID_PREFIX) || this._headerTagRegex.test(previousSibling.nodeName)) {
 						return previousSibling;
 					}
 					previousSibling = previousSibling.previousElementSibling;
@@ -1419,6 +1435,7 @@ define([
 			this._ignoreEditorScrollsCounter = Infinity;
 			this._scrollSourceAnimation.play();	
 		},
+		_headerTagRegex: /^H[123456]$/,
 		_markdownSelected: "markdownSelected", //$NON-NLS-0$
 		_selectedBlock: null
 	});
@@ -1448,6 +1465,22 @@ define([
 			"orion.menuBarToolsGroup",
 			false,
 			new mKeyBinding.KeyBinding("G", true, false, true)); //$NON-NLS-1$ //$NON-NLS-0$
+
+		ID = "markdown.toggle.orientation"; //$NON-NLS-0$
+		toggleOrientationCommand = new mCommands.Command({
+   			id: ID,
+			callback: function(/*data*/) {
+				this.editor.togglePaneOrientation();
+			}.bind(this),
+			type: "toggle", //$NON-NLS-0$
+			imageClass: "core-sprite-split-pane-orientation", //$NON-NLS-0$
+			tooltip: messages["TogglePaneOrientationTooltip"],
+			visibleWhen: function() {
+				return !!this._options;
+			}.bind(this),
+		});
+		options.commandRegistry.addCommand(toggleOrientationCommand);
+		options.commandRegistry.registerCommandContribution("settingsActions", ID, 1, null, false); //$NON-NLS-0$
 	}
 	MarkdownEditorView.prototype = {
 		create: function() {

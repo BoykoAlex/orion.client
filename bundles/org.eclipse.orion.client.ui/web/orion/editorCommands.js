@@ -285,11 +285,11 @@ define([
 
 			// page navigation commands (go to line)
 			var lineParameter = new mCommandRegistry.ParametersDescription(
-				[new mCommandRegistry.CommandParameter('line', 'number', 'Line:')], //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+				[new mCommandRegistry.CommandParameter('line', 'number', messages.gotoLinePrompt)], //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 				{hasOptionalParameters: false},
 				function() {
 					var line = editor.getModel().getLineAtOffset(editor.getCaretOffset()) + 1;
-					return [new mCommandRegistry.CommandParameter('line', 'number', 'Line:', line.toString())]; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+					return [new mCommandRegistry.CommandParameter('line', 'number', messages.gotoLinePrompt, line.toString())]; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 				}
 			);
 			
@@ -361,6 +361,9 @@ define([
 				},
 				parameters: findParameter,
 				callback: function(data) {
+					if (lib.node("replaceCompareDiv").classList.contains("replaceCompareDivVisible")) { //$NON-NLS-1$ //$NON-NLS-0$
+						return false; //TODO is there a better way of preventing the command from being executed?
+					}
 					if (self._localSearcher) {
 						var searchString = "";
 						var parsedParam = null;
@@ -386,6 +389,7 @@ define([
 							}
 							self._localSearcher.show({findString: searchString, replaceString: parsedParam.replaceWith});
 							self._localSearcher.find(true, tempOptions);
+							self.commandService.closeParameterCollector(); //TODO is there a better way of hiding the parameter collector?
 						} else {
 							self._localSearcher.show({findString: searchString});
 						}

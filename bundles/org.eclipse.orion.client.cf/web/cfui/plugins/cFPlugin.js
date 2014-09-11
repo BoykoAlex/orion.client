@@ -1,5 +1,5 @@
 /*******************************************************************************
- * @license
+  * @license
  * Copyright (c) 2013 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
@@ -11,8 +11,8 @@
 
 /*eslint-env browser,amd*/
 
-define(['i18n!cfui/nls/messages', 'orion/xhr', 'orion/plugin', 'orion/cfui/cFClient', 'orion/serviceregistry', 'domReady!'],
-		function(messages, xhr, PluginProvider, CFClient, ServiceRegistry) {
+define(['orion/xhr', 'orion/plugin', 'orion/cfui/cFClient', 'orion/cfui/manifestEditor', 'orion/serviceregistry', 'domReady!'],
+		function(xhr, PluginProvider, CFClient, mManifestEditor, ServiceRegistry) {
 
 	var temp = document.createElement('a');
 	var login = temp.href;
@@ -20,21 +20,11 @@ define(['i18n!cfui/nls/messages', 'orion/xhr', 'orion/plugin', 'orion/cfui/cFCli
 	var headers = {
 		name: "Cloud Foundry",
 		version: "1.0",
-		description: "This plugin integrates with Cloud Foundry.",
-		//login: login
+		description: "This plugin integrates with Cloud Foundry."
 	};
 
 	var provider = new PluginProvider(headers);
 	var cFService = new CFClient.CFService();
-
-	// Add "Deploy" category to hamburger
-//	provider.registerService("orion.page.link.category", null, {
-//		id: "deploy",
-//		nameKey: "Deploy",
-//		nls: "orion/edit/nls/messages",
-//		imageClass: "core-sprite-deploy",
-//		order: 60
-//	});
 
 	// initialize service registry and EAS services
 	var serviceRegistry = new ServiceRegistry.ServiceRegistry();
@@ -92,16 +82,18 @@ define(['i18n!cfui/nls/messages', 'orion/xhr', 'orion/plugin', 'orion/cfui/cFCli
 	provider.registerService("orion.core.setting", null, {
 		settings: [{
 			pid: "org.eclipse.orion.client.cf.settings",
-			name: messages['Settings'],
-			category: messages['Cloud'],
+			nameKey: "Settings",
+			nls: "cfui/nls/messages",
+			category: "cloud",
+			categoryKey: "Cloud",
 			properties: [{
 				id: "targetUrl",
-				name: messages['API URL'],
+				nameKey: "API URL",
 				type: "string",
 				defaultValue: apiUrl
 			}, {
 				id: "manageUrl",
-				name: messages['Manage URL'],
+				nameKey: "Manage URL",
 				type: "string",
 				defaultValue: manageUrl
 			}]
@@ -291,27 +283,15 @@ define(['i18n!cfui/nls/messages', 'orion/xhr', 'orion/plugin', 'orion/cfui/cFCli
 	
 	/** Add cf apps command **/
 	function describeApp(app) {
-		var name = app.name;
+		var name = app.Name;
 		var strResult = "\n" + name + "\t";
-		if (name.length <= 4) {
-			strResult += "\t";
-		}
-		strResult += app.state + "\t";
-		var runningInstances = app.runningInstances;
-		if (!runningInstances) {
-			runningInstances = 0;
-		}
-		var mem = app.memory;
-		strResult += runningInstances + " x " + mem + "M\t";
-		var url = app.urls[0];
-		strResult += "\t[" + url + "](http://" + url + ")";
 		return strResult;
 	}
 	
 	var appsImpl = {
 		callback: function(args) {
 			return cFService.getApps().then(function(result) {
-				result = result.apps;
+				result = result.Apps;
 				
 				if (!result || result.length === 0) {
 					return "No applications.";
@@ -495,13 +475,11 @@ define(['i18n!cfui/nls/messages', 'orion/xhr', 'orion/plugin', 'orion/cfui/cFCli
 	var routesImpl = {
 		callback: function(args) {
 			return cFService.getRoutes().then(function(result) {
-				result = result.Routes;
-				
-				if (!result || result.length === 0) {
+				if (!result || !result.Routes || result.Routes.length === 0) {
 					return "No routes.";
 				}
 				var strResult = "\nhost\tdomain\tapps\n";
-				result.forEach(function(route) {
+				result.Routes.forEach(function(route) {
 					strResult += describeRoute(route);
 				});
 				return strResult;
@@ -517,16 +495,46 @@ define(['i18n!cfui/nls/messages', 'orion/xhr', 'orion/plugin', 'orion/cfui/cFCli
 		}
 	);
 	
-	/** Add cf delete command **/
-	/** var deleteImpl = {
+	/** Add cf create-route command **/
+	var createRouteImpl = {
 		callback: function(args, context) {
-			return cFService.deleteApp(args.app, context.cwd).then(function(result) {
-				if (!result || !result.applications) {
-					return "No applications found";
+			return cFService.createRoute(null, args.domain, args.hostname).then(function(result) {
+				if (!result || result.Type !== "Route") {
+					return "No routes found";
+				}
+				var strResult = "\nCreated " + result.Host + " at " + args.domain;
+				return strResult;
+			});
+		}
+	};
+	
+	provider.registerServiceProvider(
+		"orion.shell.command",
+		createRouteImpl, {
+			name: "cfo create-route",
+			description: "Create a url route in a space for later use",
+			parameters: [{
+				name: "domain",
+				type: "string",
+				description: "Domain"
+			}, {
+				name: "hostname",
+				type: "string",
+				description: "Hostname"
+			}]
+		}
+	);
+	
+	/** Add cf delete-route command **/
+	var deleteRouteImpl = {
+		callback: function(args, context) {
+			return cFService.deleteRoute(null, args.domain, args.hostname).then(function(result) {
+				if (!result || !result.Routes) {
+					return "No routes found";
 				}
 				var strResult = "";
-				result.applications.forEach(function(item) {
-					strResult += "\nDeleted " + item.name;
+				result.Routes.forEach(function(item) {
+					strResult += "\nDeleted " + item.Host + " at " + item.DomainName;
 				});
 				return strResult;
 			});
@@ -535,17 +543,93 @@ define(['i18n!cfui/nls/messages', 'orion/xhr', 'orion/plugin', 'orion/cfui/cFCli
 	
 	provider.registerServiceProvider(
 		"orion.shell.command",
-		deleteImpl, {
-			name: "cfo delete",
-			description: "Delete an application",
+		deleteRouteImpl, {
+			name: "cfo delete-route",
+			description: "Delete a route",
+			parameters: [{
+				name: "domain",
+				type: "string",
+				description: "Domain"
+			}, {
+				name: "hostname",
+				type: "string",
+				description: "Hostname"
+			}]
+		}
+	);
+	
+	/** Add cf delete-orphaned-routes command **/
+	var deleteRouteImpl = {
+		callback: function(args, context) {
+			return cFService.deleteOrphanedRoutes(null).then(function(result) {
+				if (!result || !result.Routes) {
+					return "No orphaned routes";
+				}
+				var strResult = "";
+				result.Routes.forEach(function(item) {
+					strResult += "\nDeleted " + item.Host + " at " + item.DomainName;
+				});
+				return strResult;
+			});
+		}
+	};
+	
+	provider.registerServiceProvider(
+		"orion.shell.command",
+		deleteRouteImpl, {
+			name: "cfo delete-orphaned-routes",
+			description: "Delete all orphaned routes (e.g.: those that are not mapped to an app)",
+			parameters: []
+		}
+	);
+	
+	/** Add cf logs command **/
+	var appLogsImpl = {
+		callback: function(args, context) {
+			return cFService.getLogz(null, args.app).then(function(result) {
+				var messages = result.Messages;
+				
+				if (!messages || messages.length === 0) {
+					return "No recent logs.";
+				}
+				var strResult = "";
+				messages.forEach(function(message) {
+					strResult += "\n" + message;
+				});
+				return strResult;
+			});
+		}
+	};
+	
+	/*provider.registerServiceProvider(
+		"orion.shell.command",
+		appLogsImpl, {
+			name: "cfo logs",
+			description: "Show recent logs for an app",
 			parameters: [{
 				name: "app",
 				type: "string",
-				description: "Application to delete",
+				description: "Application to show logs for",
 				defaultValue: null
 			}]
 		}
-	); **/
-
+	);*/
+	
+	/* Add a manifest editor content assist */
+	provider.registerServiceProvider("orion.edit.contentAssist",
+		mManifestEditor.contentAssistImpl, {
+			name : "Cloud foundry manifest content assist",
+			contentType: ["text/x-yaml"]
+		}
+	);
+	
+	/* Add a manifest validator */
+	provider.registerServiceProvider("orion.edit.validator",
+		mManifestEditor.validatorImpl, {
+			name : "Cloud foundry manifest validator",
+			contentType: ["text/x-yaml"]
+		}
+	);
+	
 	provider.connect();
 });

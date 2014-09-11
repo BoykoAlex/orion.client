@@ -186,11 +186,9 @@ function(messages, Deferred, i18nUtil, mExplorer, mSearchUtils) {
         var qParams = mSearchUtils.copySearchParams(this._searchHelper.params, true);
         qParams.resource = modelItem.parentLocation;
         qParams.start = 0;
-        var href = mSearchUtils.generateSearchHref(qParams);
         var tooltip = i18nUtil.formatMessage(messages["Search again in this folder with \"${0}\""], this._searchHelper.displayedSearchTerm);
         return {
             name: modelItem.fullPathName,
-            href: href,
             tooltip: tooltip
         };
     };
@@ -540,6 +538,14 @@ function(messages, Deferred, i18nUtil, mExplorer, mSearchUtils) {
             }
         }
         return matchesReplaced;
+    };
+    
+    SearchResultModel.prototype.removeChild = function(model, item) {
+        var index = model.children.indexOf(item);
+        if (-1 < index) {
+        	model.children.splice(index, 1);
+        	item.stale = true;
+        }
     };
 
     SearchResultModel.prototype.constructor = SearchResultModel;

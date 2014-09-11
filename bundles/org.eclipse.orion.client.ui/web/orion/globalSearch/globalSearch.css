@@ -11,17 +11,19 @@
 	padding-left: 0 !important;
 	vertical-align: top;
 	white-space: nowrap;
-	width: 45px;
+	width: 38px;
 }
 
 .search_primaryColumn_Details {
 	padding-left: 0 !important;
+	text-align: right;
 	vertical-align: middle;
 	width: 45px;
 }
 
 .search_secondaryColumn{
 	color: #666666;	
+	white-space: nowrap;
 }
 
 .search_report {

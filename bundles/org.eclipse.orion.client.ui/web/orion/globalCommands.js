@@ -16,12 +16,13 @@ define([
 		'orion/webui/splitter', 'orion/webui/dropdown', 'orion/webui/tooltip', 'orion/contentTypes', 'orion/keyAssist',
 		'orion/widgets/themes/ThemePreferences', 'orion/widgets/themes/container/ThemeData', 'orion/Deferred',
 		'orion/widgets/UserMenu', 'orion/PageLinks', 'orion/webui/dialogs/OpenResourceDialog', 'text!orion/banner/banner.html',
-		'text!orion/banner/footer.html', 'text!orion/banner/toolbar.html', 
-		'orion/util', 'orion/customGlobalCommands', 'orion/fileClient', 'orion/webui/SideMenu', 'orion/objects'
+		'text!orion/banner/footer.html', 'text!orion/banner/toolbar.html',
+		'orion/util', 'orion/customGlobalCommands', 'orion/fileClient', 'orion/webui/SideMenu', 'orion/objects', 'orion/i18nUtil',
 	],
 	function (messages, require, commonHTML, KeyBinding, EventTarget, mCommands, mParameterCollectors, mExtensionCommands, 
 		mBreadcrumbs, lib, mSplitter, mDropdown, mTooltip, mContentTypes, mKeyAssist, mThemePreferences, mThemeData, Deferred,
-		mUserMenu, PageLinks, openResource, BannerTemplate, FooterTemplate, ToolbarTemplate, util, mCustomGlobalCommands, mFileClient, SideMenu, objects) {
+		mUserMenu, PageLinks, openResource, BannerTemplate, FooterTemplate, ToolbarTemplate, util, mCustomGlobalCommands, mFileClient,
+		SideMenu, objects, i18nUtil) {
 	/**
 	 * This class contains static utility methods. It is not intended to be instantiated.
 	 *
@@ -357,6 +358,8 @@ define([
 		}
 	}
 
+	var currentBreadcrumb = null;
+	
 	/**
 	 * Set the target of the page so that common infrastructure (breadcrumbs, related menu, etc.) can be added for the page.
 	 * @name orion.globalCommands#setPageTarget
@@ -417,7 +420,7 @@ define([
 		title = options.title;
 		if (!title) {
 			if (name) {
-				title = name + " - " + options.task; //$NON-NLS-0$
+				title = i18nUtil.formatMessage(messages["PageTitleFormat"], name, options.task); //$NON-NLS-0$
 			} else {
 				title = options.task;
 			}
@@ -427,8 +430,11 @@ define([
 		var locationNode = options.breadCrumbContainer ? lib.node(options.breadCrumbContainer) : lib.node("location"); //$NON-NLS-0$
 		if (locationNode) {
 			lib.empty(locationNode);
+			if (currentBreadcrumb) {
+				currentBreadcrumb.destroy();
+			}
 			if (options.staticBreadcrumb) {
-				new mBreadcrumbs.BreadCrumbs({
+				currentBreadcrumb = new mBreadcrumbs.BreadCrumbs({
 					container: locationNode,
 					rootSegmentName: breadcrumbRootName
 				});	
@@ -436,7 +442,7 @@ define([
 				var fileClient = serviceRegistry && new mFileClient.FileClient(serviceRegistry);
 				var resource = options.breadcrumbTarget || options.target;
 				var workspaceRootURL = (fileClient && resource && resource.Location) ? fileClient.fileServiceRootURL(resource.Location) : null;
-				new mBreadcrumbs.BreadCrumbs({
+				currentBreadcrumb = new mBreadcrumbs.BreadCrumbs({
 					container: locationNode,
 					resource: resource,
 					rootSegmentName: breadcrumbRootName,
@@ -749,7 +755,7 @@ define([
 				tooltip: messages["System Config Tooltip"],
 				id: "orion.configDetailsPage", //$NON-NLS-0$
 				hrefCallback: function () {
-					return require.toUrl("help/about.html"); //$NON-NLS-0$
+					return require.toUrl("about/about.html"); //$NON-NLS-0$
 				}
 			});
 	

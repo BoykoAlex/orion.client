@@ -150,7 +150,7 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 			
 			// Apps CF v2 operations
 			
-			pushApp: function(target, name, contentLocation) {
+			pushApp: function(target, name, contentLocation, manifest, saveManifest) {
 				var pushReq = {};
 				
 				if (name)
@@ -161,6 +161,12 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 				
 				if (target)
 					pushReq.Target = target;
+				
+				if(manifest)
+					pushReq.Manifest = manifest;
+				
+				if(saveManifest)
+					pushReq.Persist = saveManifest;
 				
 				return this._xhrV1("PUT", require.toUrl("cfapi/apps"), pushReq);
 			},
@@ -180,8 +186,13 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 				return this._xhrV1("GET", url);
 			},
 			
-			getApps: function() {
-				return this._xhrV1("GET", require.toUrl("cfapi/apps"));
+			getApps: function(target) {
+				var url = require.toUrl("cfapi/apps");
+				
+				if (target)
+					url += "?Target=" + JSON.stringify(target);
+				
+				return this._xhrV1("GET", url);
 			},
 			
 			startApp: function(target, name, contentLocation, timeout) {
@@ -229,10 +240,31 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 				return this._xhrV1("GET", url);
 			},
 			
+			getServices: function(target) {
+				var url = require.toUrl("cfapi/services");
+				
+				if (target)
+					url += "?Target=" + JSON.stringify(target);
+				
+				return this._xhrV1("GET", url);
+			},
+			
+			createRoute: function(target, domainName, hostName) {
+				var routeObj = {
+					DomainName: domainName,
+					Host: hostName
+				};
+				
+				if (target)
+					routeObj.Target = target;
+				
+				return this._xhrV1("PUT", require.toUrl("cfapi/routes"), routeObj);
+			},
+			
 			deleteRoute: function(target, domainName, hostName) {
 				var routeObj = {
 					DomainName: domainName,
-					HostName: hostName
+					Host: hostName
 				};
 				
 				var url = require.toUrl("cfapi/routes");
@@ -248,20 +280,53 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 				var url = require.toUrl("cfapi/routes/" + routeId);
 				
 				if (target)
-					url += "&Target=" + JSON.stringify(target);
+					url += "?Target=" + JSON.stringify(target);
 				
 				return this._xhrV1("DELETE", url);
 			},
 			
-			deleteOrphanedRoutes: function () {
-				var url = require.toUrl("cfapi/routes/" + routeId);
+			deleteOrphanedRoutes: function (target) {
+				var url = require.toUrl("cfapi/routes");
 				url += "?Orphaned=true";
 				
 				if (target)
 					url += "&Target=" + JSON.stringify(target);
 				
 				return this._xhrV1("DELETE", url);
-			}
+			},
+			
+			mapRoute: function(target, appId, routeId) {
+				var url = require.toUrl("cfapi/apps/" + appId + "/routes/" + routeId);
+				if (target)
+					url += "?Target=" + JSON.stringify(target);
+				
+				return this._xhrV1("PUT", url);
+			},
+			
+			unmapRoute: function(target, appId, routeId) {
+				var url = require.toUrl("cfapi/apps/" + appId + "/routes/" + routeId);
+				if (target)
+					url += "?Target=" + JSON.stringify(target);
+				
+				return this._xhrV1("DELETE", url);
+			},
+			
+			getManifestInfo: function(relFilePath){
+				var url = require.toUrl("cfapi/manifests" + relFilePath);
+				return this._xhrV1("GET", url);
+			},
+			
+			getLogz: function(target, appName){
+				if(!appName){
+					var deferred = new Deferred();
+					deferred.reject("App name is missing");
+				}
+				var url = require.toUrl("cfapi/logz/" + appName);
+				if(target){
+					url += ("?Target=" + JSON.stringify(target));
+				}
+				return this._xhrV1("GET", url);
+			},
 		};
 		
 		return CFService;

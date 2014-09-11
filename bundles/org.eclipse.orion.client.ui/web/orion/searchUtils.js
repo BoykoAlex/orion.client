@@ -48,7 +48,7 @@ function _generateSearchHelperRegEx(inFileQuery, searchParams, fromStart){
 	}
 }
 
-searchUtils.doSearch = function(searcher, serviceRegistry, searchStr, advOptions){
+searchUtils.getSearchParams = function(searcher, searchStr, advOptions){
 	if (searcher) {
 		var newSearchStr = searchStr, commitSearch = true;
 		if(newSearchStr === "*"){ //$NON-NLS-0$
@@ -59,12 +59,13 @@ searchUtils.doSearch = function(searcher, serviceRegistry, searchStr, advOptions
 		}
 		if (commitSearch) {
 			var searchParams = searcher.createSearchParams(newSearchStr, false, false, advOptions);
-			var href = searchUtils.generateSearchHref(searchParams);
-			window.location = href;
+			return searchParams;
 		}
 	} else {
 		window.alert(messages["Can't search: no search service is available"]);
 	}
+	
+	return null;
 };
 
 /**
@@ -163,25 +164,6 @@ searchUtils.copySearchParams = function(searchParams, copyReplace) {
 		}
 	}
 	return result;	
-};
-
-searchUtils.generateSearchHref = function(options) {
-	var base =  require.toUrl("search/search.html"); //$NON-NLS-0$
-	var sParams = searchUtils.copySearchParams(options, true);
-	var searchLocation = sParams.resource;
-	sParams.resource = undefined;
-	var href;
-	if(typeof sParams.keyword !== "undefined"){ //$NON-NLS-0$
-		href = new URITemplate(base + "#{,resource,params*}").expand({ //$NON-NLS-0$
-			resource: searchLocation,
-			params: sParams
-		});
-	} else {
-		href = new URITemplate(base + "#{,resource}").expand({ //$NON-NLS-0$
-			resource: searchLocation
-		});
-	}
-	return href;
 };
 
 searchUtils.generateFindURLBinding = function(searchParams, inFileQuery, lineNumber, replaceStr, paramOnly) {

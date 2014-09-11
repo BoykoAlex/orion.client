@@ -44,7 +44,8 @@
         estraverse: 'estraverse/estraverse',
         escope: 'escope/escope',
         logger: 'javascript/logger',
-        csslint: 'csslint/csslint'
+        csslint: 'csslint/csslint',
+        doctrine: 'doctrine/doctrine'
     },
     packages: [
         {
@@ -83,6 +84,8 @@
     modules: (function() {
         var modules = [
             { name: "index" },
+            { name: "cfui/apps" },
+            { name: "cfui/deployInteractive" },
             { name: "cfui/logs" },
             { name: "cfui/plugins/cFDeployService" },
             { name: "cfui/plugins/cFPlugin" },
@@ -90,15 +93,12 @@
             { name: "edit/content/imageViewerPlugin" },
             { name: "edit/content/jsonEditorPlugin" },
             { name: "edit/edit" },
-            { name: "git/git-commit" },
-            { name: "git/git-log" },
             { name: "git/git-repository" },
-            { name: "git/git-status" },
             { name: "git/plugins/gitPlugin" },
             { name: "javascript/plugins/javascriptPluginLoader" },
             { name: "javascript/plugins/javascriptPlugin" },
             { name: "mixloginstatic/LoginWindow" },
-            { name: "mixloginstatic/manageOpenids" },
+            { name: "mixloginstatic/manageExternalIds" },
             { name: "operations/list" },
             { name: "plugins/GerritFilePlugin" },
             { name: "plugins/GitHubFilePlugin" },
@@ -114,6 +114,7 @@
             { name: "plugins/languages/php/phpPlugin" },
             { name: "plugins/languages/python/pythonPlugin" },
             { name: "plugins/languages/ruby/rubyPlugin" },
+            { name: "plugins/languages/swift/swiftPlugin" },
             { name: "plugins/languages/xml/xmlPlugin" },
             { name: "plugins/languages/xquery/xqueryPlugin" },
             { name: "plugins/languages/yaml/yamlPlugin" },
@@ -125,7 +126,6 @@
             { name: "plugins/webEditingPlugin" },
             { name: "profile/user-list" },
             { name: "profile/userservicePlugin" },
-            { name: "search/search" },
             { name: "settings/settings" },
             { name: "shell/plugins/shellPagePlugin" },
             { name: "shell/shellPage" },

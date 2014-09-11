@@ -895,6 +895,11 @@ define([
 					if (!row) {
 						return this.changedItem(parent, true).then(function() {
 							var row = this.getRow(item);
+							if (!row) {
+								parent.children.unshift(item);
+								this.myTree.refresh(parent, parent.children, false);
+								row = this.getRow(item);	
+							}
 							return row ? row._item : new Deferred().reject();
 						}.bind(this));
 					}
@@ -929,7 +934,16 @@ define([
 			}.bind(this), deferred.reject);
 			return deferred;
 		},
-
+		
+		/**
+		 * Create and return the row for the given item
+		 * @param {Object} The parent of the row.
+		 * @param {Object} The contents of the row.
+		 */
+		insertMissingItem: function(parent, item) {
+			return null;
+		},
+		
 		/**
 		 * Shows and selects the given item.
 		 * @param {Object} The item to be revealed.
@@ -938,12 +952,7 @@ define([
 		 */
 		reveal: function(item, reroot) {
 			return this.showItem(item, reroot).then(function(result) {
-				var navHandler = this.getNavHandler();
-				if (navHandler) {
-					navHandler.cursorOn(result, true);
-					navHandler.setSelection(result);
-				}
-				return result;
+				this.select(result);
 			}.bind(this));
 		},
 
@@ -1022,16 +1031,11 @@ define([
 			this._lastPath = path;
 			var self = this;
 			if (force || (path !== this.treeRoot.Path)) {
-				return this.load(this.fileClient.loadWorkspace(path), messages["Loading "] + path).then(function(p) {
+				return this.load(this.fileClient.loadWorkspace(path), messages["Loading "] + path, postLoad).then(function(p) {
 					self.treeRoot.Path = path;
-					if (typeof postLoad === "function") { //$NON-NLS-0$
-						postLoad();
-					}
-					self.dispatchEvent({ type: "rootChanged", root: self.treeRoot }); //$NON-NLS-0$
 					return new Deferred().resolve(self.treeRoot);
 				}, function(err) {
 					self.treeRoot.Path = null;
-					self.dispatchEvent({ type: "rootChanged", root: self.treeRoot }); //$NON-NLS-0$
 					return new Deferred().reject(err);
 				});
 			}
@@ -1054,6 +1058,7 @@ define([
 			if(!progress){
 				progress = document.createElement("div"); //$NON-NLS-0$
 				progress.id = "progress"; //$NON-NLS-0$
+				progress.classList.add("fileExplorerProgressDiv"); //$NON-NLS-0$
 				lib.empty(parent);
 				parent.appendChild(progress);
 			}
@@ -1102,6 +1107,7 @@ define([
 							deferred.resolve(tree);
 						},
 						navHandlerFactory: self.navHandlerFactory,
+						showRoot: self.showRoot,
 						setFocus: (typeof self.setFocus === "undefined" ? true : self.setFocus), //$NON-NLS-0$
 						selectionPolicy: self.renderer.selectionPolicy, 
 						onCollapse: function(model) {
@@ -1124,6 +1130,7 @@ define([
 						if (typeof self.onchange === "function") { //$NON-NLS-0$
 							self.onchange(self.treeRoot);
 						}
+						self.dispatchEvent({ type: "rootChanged", root: self.treeRoot }); //$NON-NLS-0$
 						return self.treeRoot;
 					});
 				},
@@ -1133,6 +1140,7 @@ define([
 					if (self.registry) {
 						self.registry.getService("orion.page.message").setProgressResult(error); //$NON-NLS-0$
 					}
+					self.dispatchEvent({ type: "rootChanged", root: self.treeRoot }); //$NON-NLS-0$
 					return new Deferred().reject(error);
 				}
 			);

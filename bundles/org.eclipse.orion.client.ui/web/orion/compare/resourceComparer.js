@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @license
- * Copyright (c) 2010, 2012 IBM Corporation and others.
+ * Copyright (c) 2010, 2014 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials are made 
  * available under the terms of the Eclipse Public License v1.0 
  * (http://www.eclipse.org/legal/epl-v10.html), and the Eclipse Distribution 
@@ -10,9 +10,28 @@
  *     IBM Corporation - initial API and implementation
  *******************************************************************************/
 /*eslint-env browser, amd*/
-define(['i18n!orion/compare/nls/messages', 'require', 'orion/Deferred', 'orion/webui/littlelib', 'orion/compare/compareUtils', 'orion/compare/diffProvider', 'orion/compare/compareView', 'orion/highlight', 
-		'orion/fileClient', 'orion/globalCommands', 'orion/commands', 'orion/keyBinding', 'orion/searchAndReplace/textSearcher', 'orion/editorCommands', 'orion/objects', 'orion/inputManager', 'orion/editor/editorFeatures', 'orion/contentTypes', 'orion/URL-shim'], 
-		function(messages, require, Deferred, lib, mCompareUtils, mDiffProvider, mCompareView, Highlight, mFileClient, mGlobalCommands, mCommands, mKeyBinding, mSearcher, mEditorCommands, objects, mInputManager, mEditorFeatures, mContentTypes) {
+/*global prompt URL*/
+define([
+    'i18n!orion/compare/nls/messages',
+    'orion/i18nUtil',
+    'orion/Deferred', 
+    'orion/webui/littlelib', 
+    'orion/compare/compareUtils', 
+    'orion/compare/diffProvider', 
+    'orion/compare/compareView', 
+    'orion/highlight', 
+	'orion/fileClient', 
+	'orion/globalCommands', 
+	'orion/commands', 
+	'orion/keyBinding', 
+	'orion/searchAndReplace/textSearcher', 
+	'orion/editorCommands', 
+	'orion/objects', 
+	'orion/inputManager', 
+	'orion/editor/editorFeatures', 
+	'orion/contentTypes', 
+	'orion/URL-shim'
+], function(messages, i18nUtil, Deferred, lib, mCompareUtils, mDiffProvider, mCompareView, Highlight, mFileClient, mGlobalCommands, mCommands, mKeyBinding, mSearcher, mEditorCommands, objects, mInputManager, mEditorFeatures, mContentTypes) {
 
 var exports = {};
 
@@ -72,14 +91,14 @@ exports.DefaultDiffProvider = (function() {
 					return;
 				}
 				var that = this;
-				return that._diffProvider.getDiffContent(resource).then(function(jsonData, secondArg) {
-					if (that._hasConflicts) {
+				if(that._hasConflicts) {
+					return that._diffProvider.getDiffContent(resource).then(function(jsonData, secondArg) {
 						that._diffContent = jsonData.split("diff --git")[1]; //$NON-NLS-0$
-					} else {
-						that._diffContent = jsonData;
-					}
+						return that._resolveComplexFileURL(resource);
+					}, function(){});
+				} else {// We do not need to get diff contents from server if there is no conflicts. We use client side diff here.
 					return that._resolveComplexFileURL(resource);
-				}, function(){});
+				}
 			}
 		}
 	};
@@ -228,14 +247,14 @@ exports.ResourceComparer = (function() {
 							
 				setInput: function(fileURI, editor) {
 					this._parsedLocation = {resource:fileURI};
-					that._progress.progress(that._fileClient.read(fileURI, true), "Getting file metadata " + fileURI).then( //$NON-NLS-0$
+					that._progress.progress(that._fileClient.read(fileURI, true), i18nUtil.formatMessage(messages["readingFileMetadata"], fileURI)).then( //$NON-NLS-0$
 						function(metadata) {
 							this._fileMetadata = metadata;
 							var toolbar = lib.node(this._actionBarId); //$NON-NLS-0$
 							if (toolbar) {	
 								that._commandService.destroy(toolbar);
 								var editorIndex = this._editorIndex;
-								that._commandService.renderCommands(toolbar.id, toolbar, that._compareView.getWidget().getEditors()[editorIndex], that._compareView.getWidget().getEditors()[editorIndex], "button"); //$NON-NLS-0$
+								that._commandService.renderCommands(toolbar.id, toolbar, that._compareView.getWidget().getEditors()[editorIndex], that._compareView.getWidget().getEditors()[editorIndex], "tool"); //$NON-NLS-0$
 							}
 							if(metadata){
 								this.setTitle(metadata.Location, metadata);
@@ -250,16 +269,13 @@ exports.ResourceComparer = (function() {
 				},
 				
 				setTitle : function(title, /*optional*/ metadata) {
-					//TODO: We need a better taget get here. E.g. "Compare file 1 and file 2" 
-					/*
 					var name;
 					if (metadata) {
 						name = metadata.Name;
 					}
-					mGlobalCommands.setPageTarget({task: messages["Compare"], name: name, target: metadata,
+					mGlobalCommands.setPageTarget({task: messages["compareTreeTitle"], name: name, target: metadata,
 								serviceRegistry: that._registry, commandService: that._commandService,
 								searchService: that._searchService, fileService: that._fileClient});
-					*/
 					if (title.charAt(0) === '*') { //$NON-NLS-0$
 						mGlobalCommands.setDirtyIndicator(true);
 					} else {
@@ -332,7 +348,7 @@ exports.ResourceComparer = (function() {
 				var openComparePageCommand = new mCommands.Command({
 					tooltip : messages["Open the compare page"],
 					name: messages["Compare"],
-					//imageClass : "core-sprite-link", //$NON-NLS-0$
+					imageClass : "git-sprite-compare", //$NON-NLS-0$
 					id: "orion.compare.openComparePage", //$NON-NLS-0$
 					groupId: "orion.compareGroup", //$NON-NLS-0$
 					visibleWhen: function(item) {
@@ -357,7 +373,8 @@ exports.ResourceComparer = (function() {
 			return Deferred.all(promises, function(error) { return {_error: error}; });
 	    },
 	    _loadSingleFile: function(file) {
-	        return this._registry.getService("orion.page.progress").progress(this._fileClient.read(file.URL), "Getting contents of " + file.URL).then( //$NON-NLS-1$ //$NON-NLS-0$
+	        return this._registry.getService("orion.page.progress").progress(this._fileClient.read(file.URL), //$NON-NLS-0$
+	                   i18nUtil.formatMessage(messages["readingFile"], file.URL)).then( //$NON-NLS-0$
 		        function(contents) {
 					file.Content = contents;
 					return file;
