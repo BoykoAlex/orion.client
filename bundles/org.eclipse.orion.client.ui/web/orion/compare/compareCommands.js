@@ -11,8 +11,8 @@
  *******************************************************************************/
 /*eslint-env browser, amd*/
 
-define(['i18n!orion/compare/nls/messages', 'orion/commands', 'orion/keyBinding', 'orion/webui/littlelib'], 
-function(messages, mCommands, mKeyBinding, lib) {
+define(['i18n!orion/compare/nls/messages', 'orion/commands', 'orion/keyBinding', 'orion/webui/littlelib', 'orion/EventTarget'], 
+function(messages, mCommands, mKeyBinding, lib, EventTarget) {
 
 var exports = {};
 /**
@@ -23,6 +23,7 @@ var exports = {};
  */
 exports.CompareCommandFactory = (function() {
 	function CompareCommandFactory(options){
+		EventTarget.attach(this);
 		this.setOptions(options, true);
 	}	
 	CompareCommandFactory.prototype = {
@@ -44,8 +45,9 @@ exports.CompareCommandFactory = (function() {
 		},
 		initCommands: function(compareWidget){	
 			var commandSpanId = this.options.commandSpanId;
+			var toggleCommandSpanId = this.options.toggleCommandSpanId;
 			var commandService = this.options.commandService;
-			if(!commandService || !commandSpanId){
+			if(!commandService || (!commandSpanId && !toggleCommandSpanId)){
 				return;
 			}
 			var copyToLeftCommand = new mCommands.Command({
@@ -75,7 +77,7 @@ exports.CompareCommandFactory = (function() {
 			var ignoreWhitespaceCommand = new mCommands.Command({
 				tooltip : messages["IgnoreWhitespaceTooltip"],
 				name: messages["IgnoreWhitespace"],
-				imageClass : "compare-sprite-ignore-whitespace", //$NON-NLS-0$
+				imageClass : "core-sprite-whitespace", //$NON-NLS-0$
 				id: "orion.compare.ignoreWhitespace", //$NON-NLS-0$
 				groupId: "orion.compareGroup", //$NON-NLS-0$
 				type: "toggle",
@@ -88,14 +90,15 @@ exports.CompareCommandFactory = (function() {
 				},
 				callback : function(data) {
 					data.items.ignoreWhitespace(ignoreWhitespaceCommand.checked);
-			}});
+					this.dispatchEvent({type:"compareConfigChanged", name: "ignoreWhiteSpace", value: ignoreWhitespaceCommand.checked}); //$NON-NLS-0$
+			}.bind(this)});
 			var toggleInline2WayCommand = new mCommands.Command({
 				tooltip : messages["Switch to unified diff"],
 				name: messages["Unified"],
 				imageClass : "compare-sprite-inline-2way", //$NON-NLS-0$
 				id: "orion.compare.toggleInline2Way", //$NON-NLS-0$
 				groupId: "orion.compareGroup", //$NON-NLS-0$
-				type: "toggle",
+				type: "switch",
 				visibleWhen: function(item) {
 					if(!item.options.toggler) {
 						return false;
@@ -108,7 +111,8 @@ exports.CompareCommandFactory = (function() {
 				},
 				callback : function(data) {
 					data.items.options.toggler.toggle();
-			}});
+					this.dispatchEvent({type:"compareConfigChanged", name: "mode", value: data.items.options.toggler.getWidget().type}); //$NON-NLS-0$
+			}.bind(this)});
 			var nextDiffCommand = new mCommands.Command({
 				name: messages["Next diff block"],
 				tooltip : messages["Next diff block"],
@@ -167,43 +171,58 @@ exports.CompareCommandFactory = (function() {
 			commandService.addCommand(prevChangeCommand);
 				
 			// Register command contributions
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.toggleInline2Way", 108); //$NON-NLS-0$
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.copyToLeft", 110, null, false, new mKeyBinding.KeyBinding(37/*left arrow key*/, true, false, true)); //$NON-NLS-0$
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.copyToRight", 111, null, false, new mKeyBinding.KeyBinding(39/*left arrow key*/, true, false, true)); //$NON-NLS-0$
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.nextDiff", 112, null, false, new mKeyBinding.KeyBinding(40/*down arrow key*/, true)); //$NON-NLS-0$
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.prevDiff", 113, null, false, new mKeyBinding.KeyBinding(38/*up arrow key*/, true)); //$NON-NLS-0$
-			if(compareWidget.options.wordLevelNav){
-				commandService.registerCommandContribution(commandSpanId, "orion.compare.nextChange", 114, null, false, new mKeyBinding.KeyBinding(40/*down arrow key*/, true, true)); //$NON-NLS-0$
-				commandService.registerCommandContribution(commandSpanId, "orion.compare.prevChange", 115, null, false, new mKeyBinding.KeyBinding(38/*up arrow key*/, true, true)); //$NON-NLS-0$
-			} else {
-				commandService.registerCommandContribution(commandSpanId, "orion.compare.nextChange", 114, null, true, new mKeyBinding.KeyBinding(40/*down arrow key*/, true, true)); //$NON-NLS-0$
-				commandService.registerCommandContribution(commandSpanId, "orion.compare.prevChange", 115, null, true, new mKeyBinding.KeyBinding(38/*up arrow key*/, true, true)); //$NON-NLS-0$
+			//If there is a separate DIV to render the toggle command, we use it here
+			if(toggleCommandSpanId) {
+				commandService.registerCommandContribution(toggleCommandSpanId, "orion.compare.toggleInline2Way", 108); //$NON-NLS-0$
+			} else if(commandSpanId) {
+				commandService.registerCommandContribution(commandSpanId, "orion.compare.toggleInline2Way", 108); //$NON-NLS-0$
 			}
-			commandService.registerCommandContribution(commandSpanId, "orion.compare.ignoreWhitespace", 116); //$NON-NLS-0$
+			//Render all other commands
+			if(commandSpanId) {
+				commandService.registerCommandContribution(commandSpanId, "orion.compare.copyToLeft", 110, null, false, new mKeyBinding.KeyBinding(37/*left arrow key*/, true, false, true)); //$NON-NLS-0$
+				commandService.registerCommandContribution(commandSpanId, "orion.compare.copyToRight", 111, null, false, new mKeyBinding.KeyBinding(39/*left arrow key*/, true, false, true)); //$NON-NLS-0$
+				commandService.registerCommandContribution(commandSpanId, "orion.compare.nextDiff", 112, null, false, new mKeyBinding.KeyBinding(40/*down arrow key*/, true)); //$NON-NLS-0$
+				commandService.registerCommandContribution(commandSpanId, "orion.compare.prevDiff", 113, null, false, new mKeyBinding.KeyBinding(38/*up arrow key*/, true)); //$NON-NLS-0$
+				if(compareWidget.options.wordLevelNav){
+					commandService.registerCommandContribution(commandSpanId, "orion.compare.nextChange", 114, null, false, new mKeyBinding.KeyBinding(40/*down arrow key*/, true, true)); //$NON-NLS-0$
+					commandService.registerCommandContribution(commandSpanId, "orion.compare.prevChange", 115, null, false, new mKeyBinding.KeyBinding(38/*up arrow key*/, true, true)); //$NON-NLS-0$
+				} else {
+					commandService.registerCommandContribution(commandSpanId, "orion.compare.nextChange", 114, null, true, new mKeyBinding.KeyBinding(40/*down arrow key*/, true, true)); //$NON-NLS-0$
+					commandService.registerCommandContribution(commandSpanId, "orion.compare.prevChange", 115, null, true, new mKeyBinding.KeyBinding(38/*up arrow key*/, true, true)); //$NON-NLS-0$
+				}
+				commandService.registerCommandContribution(commandSpanId, "orion.compare.ignoreWhitespace", 109); //$NON-NLS-0$
+			}
 		},
 		
 		renderCommands: function(compareWidget){
 			var commandSpanId = this.options.commandSpanId;
+			var toggleCommandSpanId = this.options.toggleCommandSpanId;
 			var commandService = this.options.commandService;
-			if(!commandService || !commandSpanId){
+			if(!commandService || (!commandSpanId && !toggleCommandSpanId)){
 				return;
 			}
-			lib.empty(lib.node(commandSpanId));
-			if(this.options.gridRenderer && this.options.gridRenderer.navGridHolder){
-				this.options.gridRenderer.navGridHolder.splice(0, this.options.gridRenderer.navGridHolder.length);
-				if(this.options.gridRenderer.additionalCmdRender){
-					if(this.options.gridRenderer.before){
-						this.options.gridRenderer.additionalCmdRender(this.options.gridRenderer.navGridHolder);
-						commandService.renderCommands(commandSpanId, commandSpanId, compareWidget, compareWidget, "tool", null, this.options.gridRenderer.navGridHolder); //$NON-NLS-0$
+			if(toggleCommandSpanId) {
+				lib.empty(lib.node(toggleCommandSpanId));
+				commandService.renderCommands(toggleCommandSpanId, toggleCommandSpanId, compareWidget, compareWidget, "tool", null); //$NON-NLS-0$
+			}
+			if(commandSpanId) {
+				lib.empty(lib.node(commandSpanId));
+				if(this.options.gridRenderer && this.options.gridRenderer.navGridHolder){
+					this.options.gridRenderer.navGridHolder.splice(0, this.options.gridRenderer.navGridHolder.length);
+					if(this.options.gridRenderer.additionalCmdRender){
+						if(this.options.gridRenderer.before){
+							this.options.gridRenderer.additionalCmdRender(this.options.gridRenderer.navGridHolder);
+							commandService.renderCommands(commandSpanId, commandSpanId, compareWidget, compareWidget, "tool", null, this.options.gridRenderer.navGridHolder); //$NON-NLS-0$
+						} else {
+							commandService.renderCommands(commandSpanId, commandSpanId, compareWidget, compareWidget, "tool", null, this.options.gridRenderer.navGridHolder); //$NON-NLS-0$
+							this.options.gridRenderer.additionalCmdRender(this.options.gridRenderer.navGridHolder);
+						}
 					} else {
 						commandService.renderCommands(commandSpanId, commandSpanId, compareWidget, compareWidget, "tool", null, this.options.gridRenderer.navGridHolder); //$NON-NLS-0$
-						this.options.gridRenderer.additionalCmdRender(this.options.gridRenderer.navGridHolder);
 					}
 				} else {
-					commandService.renderCommands(commandSpanId, commandSpanId, compareWidget, compareWidget, "tool", null, this.options.gridRenderer.navGridHolder); //$NON-NLS-0$
+					commandService.renderCommands(commandSpanId, commandSpanId, compareWidget, compareWidget, "tool", null); //$NON-NLS-0$
 				}
-			} else {
-				commandService.renderCommands(commandSpanId, commandSpanId, compareWidget, compareWidget, "tool", null); //$NON-NLS-0$
 			}
 		}
 	};

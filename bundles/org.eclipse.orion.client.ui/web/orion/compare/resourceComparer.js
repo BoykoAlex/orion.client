@@ -133,6 +133,7 @@ exports.ResourceComparer = (function() {
 		} else {
 			this._compareView = new mCompareView.TwoWayCompareView(viewOptions);
 		}
+		this._compareView.getWidget().setOptions({ignoreWhitespace: options.ignoreWhitespace});
 		this._compareView.getWidget().setOptions({extCmdHolder: this});
 		if(!viewOptions.highlighters){
 			this._compareView.getWidget().setOptions({highlighters: [new CompareStyler(serviceRegistry), new CompareStyler(serviceRegistry)]});
@@ -308,7 +309,7 @@ exports.ResourceComparer = (function() {
 		generateLink: function(compareWidget){	
 			var diffPos = compareWidget.getCurrentDiffPos();
 			var href = mCompareUtils.generateCompareHref(this.options.resource, {
-				compareTo: this.options.compareTo,
+				compareTo: this.options.compareTo ? this.options.compareTo : undefined,
 				readonly: this.options.readonly,
 				readonlyRight: this.options.readonlyRight,
 				conflict: this.options.hasConflicts,
@@ -321,7 +322,7 @@ exports.ResourceComparer = (function() {
 		openComparePage: function(compareWidget){	
 			var diffPos = compareWidget.getCurrentDiffPos();
 			var href = mCompareUtils.generateCompareHref(this.options.resource, {
-				compareTo: this.options.compareTo,
+				compareTo: this.options.compareTo ? this.options.compareTo : undefined,
 				readonly: !this.options.editableInComparePage,
 				conflict: this.options.hasConflicts,
 				block: diffPos.block ? diffPos.block : 1, 

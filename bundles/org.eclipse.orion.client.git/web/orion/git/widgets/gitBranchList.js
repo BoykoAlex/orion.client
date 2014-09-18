@@ -19,9 +19,10 @@ define([
 	'orion/Deferred',
 	'orion/git/util',
 	'orion/git/uiUtil',
+	'orion/git/gitCommands',
 	'orion/webui/littlelib',
 	'orion/objects'
-], function(messages, mGitCommitList, mExplorer, i18nUtil, Deferred, util, uiUtil, lib, objects) {
+], function(messages, mGitCommitList, mExplorer, i18nUtil, Deferred, util, uiUtil, mGitCommands, lib, objects) {
 
 	var pageQuery = "commits=0&page=1&pageSize=100"; //$NON-NLS-0$
 
@@ -93,12 +94,12 @@ define([
 				this.progressService.progress(this.gitClient.getGitRemote(parentItem.repository.RemoteLocation), msg).then(function (resp) {
 					if (progress) progress.done();
 					var remotes = resp.Children;
-					remotes.unshift({Type: "LocalRoot", Name: messages["Local"]}); //$NON-NLS-0$
+					remotes.unshift(that.localRoot = {Type: "LocalRoot", Name: messages["Local"]}); //$NON-NLS-0$
 					if (that.showTags) {
-						remotes.push({Type: "TagRoot", Name: messages["tags"]}); //$NON-NLS-0$
+						remotes.push(that.tagRoot = {Type: "TagRoot", Name: messages["tags"]}); //$NON-NLS-0$
 					}
 					if (that.showStashes) {
-						remotes.push({Type: "StashRoot", Name: messages["stashes"]}); //$NON-NLS-0$
+						remotes.push(that.stashRoot = {Type: "StashRoot", Name: messages["stashes"]}); //$NON-NLS-0$
 					}
 					onComplete(that.processChildren(parentItem, remotes));
 				}, function(error){
@@ -177,10 +178,38 @@ define([
 		this.handleError = options.handleError;
 		this.gitClient = options.gitClient;
 		this.progressService = options.progressService;
+		mGitCommands.getModelEventDispatcher().addEventListener("modelChanged", this._modelListener = function(event) { //$NON-NLS-0$
+			switch (event.action) {
+			case "addBranch": //$NON-NLS-0$
+				this.changedItem(this.model.localRoot, true);
+				break;
+			case "removeBranch": //$NON-NLS-0$
+				var local = event.branch.Type === "Branch"; //$NON-NLS-0$
+				this.changedItem(local ? this.model.localRoot : null, local);
+				break;
+			case "addRemote": //$NON-NLS-0$
+			case "removeRemote": //$NON-NLS-0$
+				this.changedItem(); //$NON-NLS-0$
+				break;
+			case "addTag": //$NON-NLS-0$
+			case "removeTag": //$NON-NLS-0$
+				this.changedItem(this.model.tagRoot, true);
+				break;
+			case "stash": //$NON-NLS-0$
+			case "dropStash": //$NON-NLS-0$
+			case "popStash": //$NON-NLS-0$
+				this.changedItem(this.model.stashRoot, true);
+				break;
+			}
+		}.bind(this));
 	}
 	GitBranchListExplorer.prototype = Object.create(mExplorer.Explorer.prototype);
 	objects.mixin(GitBranchListExplorer.prototype, /** @lends orion.git.GitBranchListExplorer.prototype */ {
-		changedItem: function(item) {
+		destroy: function(){
+			mGitCommands.getModelEventDispatcher().removeEventListener("modelChanged", this._modelListener); //$NON-NLS-0$
+			mExplorer.Explorer.prototype.destroy.call(this);
+		},
+		changedItem: function(item, forceExpand) {
 			var deferred = new Deferred();
 			var model = this.model;
 			if (!item) {
@@ -194,7 +223,7 @@ define([
 			}
 			model.getChildren(item, function(children) {
 				item.removeAll = true;
-				that.myTree.refresh.bind(that.myTree)(item, children, false);
+				that.myTree.refresh.bind(that.myTree)(item, children, forceExpand);
 				deferred.resolve(children);
 			});
 			return deferred;
@@ -244,10 +273,20 @@ define([
 			var section = this.section;
 			if (!section) return;
 			var actionsNodeScope = this.sectionActionScodeId || section.actionsNode.id;
+			var commandRegistry = this.commandService;
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.orion.git.applyStash", 100); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.orion.git.dropStash", 1000); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.removeBranch", 1000); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.removeRemoteBranch", 1000); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.removeRemote", 1000); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.removeTag", 1000); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.checkoutTag", 100); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.checkoutBranch", 100); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.orion.git.fetchRemote", 100); //$NON-NLS-1$ //$NON-NLS-0$
 			if (root.Type === "RemoteRoot") { //$NON-NLS-0$
-				this.commandService.registerCommandContribution(actionsNodeScope, "eclipse.addBranch", 200); //$NON-NLS-0$
-				this.commandService.registerCommandContribution(actionsNodeScope, "eclipse.addRemote", 100); //$NON-NLS-0$
-				this.commandService.renderCommands(actionsNodeScope, actionsNodeScope, root.repository, this, "button"); //$NON-NLS-0$
+				commandRegistry.registerCommandContribution(actionsNodeScope, "eclipse.addBranch", 200); //$NON-NLS-0$
+				commandRegistry.registerCommandContribution(actionsNodeScope, "eclipse.addRemote", 100); //$NON-NLS-0$
+				commandRegistry.renderCommands(actionsNodeScope, actionsNodeScope, root.repository, this, "button"); //$NON-NLS-0$
 			}
 		}
 	});
@@ -408,7 +447,7 @@ define([
 					}
 
 					var actionsArea = document.createElement("div"); //$NON-NLS-0$
-					actionsArea.className = "sectionTableItemActions"; //$NON-NLS-0$
+					actionsArea.className = "sectionTableItemActions toolComposite"; //$NON-NLS-0$
 					actionsArea.id = actionsID;
 					horizontalBox.appendChild(actionsArea);
 					this.commandService.renderCommands(this.actionScopeId, actionsArea, item, this.explorer, "tool"); //$NON-NLS-0$	

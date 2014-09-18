@@ -66,9 +66,21 @@ define([
 						image.src = commit.AuthorImage;
 						image.name = commit.AuthorName;
 						image.className = "git-author-icon"; //$NON-NLS-0$
-						if (commit.incoming) image.classList.add("incoming"); //$NON-NLS-0$
-						if (commit.outgoing) image.classList.add("outgoing"); //$NON-NLS-0$
 						parent.appendChild(image);
+						if (commit.incoming) image.classList.add("incoming"); //$NON-NLS-0$
+						if (commit.outgoing) {
+							image.classList.add("outgoing"); //$NON-NLS-0$
+							if (!commit.Diffs || !commit.Diffs.length) {
+								image.classList.add("invalid"); //$NON-NLS-0$
+								var badgeDiv = document.createElement("div"); //$NON-NLS-0$
+								badgeDiv.title = messages["EmptyCommitWarning"];
+								badgeDiv.className = "gitCommitWarningBadge"; //$NON-NLS-0$
+								var badge = document.createElement("div"); //$NON-NLS-0$
+								badge.className = "core-sprite-warning"; //$NON-NLS-0$
+								badgeDiv.appendChild(badge);
+								parent.appendChild(badgeDiv);
+							}
+						}
 					}
 				}
 			}
@@ -198,6 +210,7 @@ define([
 				tags.textContent = messages["tags: "];
 				tags.className = "gitCommitTagsTitle"; //$NON-NLS-0$
 				commit.Tags.forEach(function (tag) {
+					tag.parent = commit;
 					var tagSpan = document.createElement("span"); //$NON-NLS-0$
 					tagSpan.textContent = tag.Name;
 					tagSpan.className = "gitCommitTag"; //$NON-NLS-0$

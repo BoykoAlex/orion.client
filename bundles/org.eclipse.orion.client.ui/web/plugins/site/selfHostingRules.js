@@ -20,7 +20,7 @@ define([], function() {
 	var SELF_HOSTING_TEMPLATE = [
 		{ type: FILE, source: "/", targetPattern: "${0}/bundles/org.eclipse.orion.client.ui/web/index.html" },
 		{ type: FILE, source: "/", targetPattern: "${0}/bundles/org.eclipse.orion.client.ui/web" },
-		{ type: FILE, source: "/", targetPattern: "${0}/bundles/org.eclipse.orion.client.doc/web" },
+		{ type: FILE, source: "/", targetPattern: "${0}/bundles/org.eclipse.orion.client.help/web" },
 		{ type: FILE, source: "/", targetPattern: "${0}/bundles/org.eclipse.orion.client.users/web" },
 		{ type: FILE, source: "/", targetPattern: "${0}/bundles/org.eclipse.orion.client.core/web" },
 		{ type: FILE, source: "/", targetPattern: "${0}/bundles/org.eclipse.orion.client.editor/web" },
@@ -48,7 +48,6 @@ define([], function() {
 		{ type: API, source: "/openids", targetPattern: "${0}openids" },
 		{ type: API, source: "/task", targetPattern: "${0}task" },
 		{ type: API, source: "/cfapi", targetPattern: "${0}cfapi" },
-//		{ type: API, source: "/help", targetPattern: "${0}help" },
 		{ type: API, source: "/docker", targetPattern: "${0}docker" }
 	];
 

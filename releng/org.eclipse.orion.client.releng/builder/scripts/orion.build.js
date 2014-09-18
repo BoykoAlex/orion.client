@@ -65,6 +65,7 @@
         "${orionClient}/bundles/org.eclipse.orion.client.ui",
         "${orionClient}/bundles/org.eclipse.orion.client.editor",
         "${orionClient}/bundles/org.eclipse.orion.client.git",
+        "${orionClient}/bundles/org.eclipse.orion.client.help",
         "${orionClient}/bundles/org.eclipse.orion.client.javascript",
         "${orionClient}/bundles/org.eclipse.orion.client.webtools",
         "${orionClient}/bundles/org.eclipse.orion.client.users"
@@ -105,6 +106,7 @@
             { name: "plugins/authenticationPlugin" },
             { name: "plugins/fileClientPlugin" },
             { name: "plugins/gitBlamePlugin" },
+            { name: "plugins/helpPlugin" },
             { name: "plugins/jslintPlugin" },
             { name: "plugins/languages/arduino/arduinoPlugin" },
             { name: "plugins/languages/c/cPlugin" },

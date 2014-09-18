@@ -32,7 +32,7 @@ define([
 	
 	var repoTemplate = new URITemplate("git/git-repository.html#{,resource,params*}"); //$NON-NLS-0$
 	
-	function compare(s1, s2) {
+	function compare(s1, s2, props) {
 		if (s1 === s2) { return true; }
 		if (s1 && !s2 || !s1 && s2) { return false; }
 		if ((s1 && s1.constructor === String) || (s2 && s2.constructor === String)) { return false; }
@@ -48,16 +48,22 @@ define([
 		}
 		if (!(s1 instanceof Object) || !(s2 instanceof Object)) { return false; }
 		var p;
-		for (p in s1) {
+		for (p in (props || s1)) {
 			if (s1.hasOwnProperty(p)) {
 				if (!s2.hasOwnProperty(p)) { return false; }
 				if (!compare(s1[p], s2[p])) {return false; }
 			}
 		}
-		for (p in s2) {
-			if (!s1.hasOwnProperty(p)) { return false; }
+		if (!props) {
+			for (p in s2) {
+				if (!s1.hasOwnProperty(p)) { return false; }
+			}
 		}
 		return true;
+	}
+	
+	function compareLocation(s1, s2) {
+		return compare(s1, s2, {Location: ""});
 	}
 
 	/**
@@ -94,24 +100,29 @@ define([
 		var that = this;
 		mGitCommands.getModelEventDispatcher().addEventListener("modelChanged", function(event) { //$NON-NLS-0$
 			switch (event.action) {
+			case "rebase": //$NON-NLS-0$
+			case "merge": //$NON-NLS-0$
+			case "mergeSquash": //$NON-NLS-0$
+				if (event.failed || event.rebaseAction) {
+					that.changedItem();
+				}
+				break;
 			case "checkout": //$NON-NLS-0$
 				if (that.repository) {
 					window.location.href = require.toUrl(repoTemplate.expand({resource: that.lastResource = that.repository.Location}));
 				}
 				that.changedItem();
 				break;
-			case "deleteClone": //$NON-NLS-0$
+			case "removeClone": //$NON-NLS-0$
 				if (that.repository && event.items.some(function(repo) { return repo.Location === that.repository.Location; })) {
 					window.location.href = require.toUrl(repoTemplate.expand({resource: that.lastResource = ""}));
+					that.changedItem();
 				}
-				that.changedItem();
 				break;
-			case "stage": //$NON-NLS-0$
-			case "unstage": //$NON-NLS-0$
-				break;
-			case "cherrypick": //$NON-NLS-0$
-			default:
-				that.changedItem();
+			case "applyPatch": //$NON-NLS-0$
+				that.repository.status = null;
+				that.changes = null;
+				that.setSelectedChanges(that.changes);
 				break;
 			}
 		});
@@ -252,24 +263,48 @@ define([
 		this.destroyDiffs();
 	};
 	
+	
 	GitRepositoryExplorer.prototype.setSelectedRepository = function(repository, force) {
+		var that = this;
+		var setRepoSelection =  function(repository, force) {
+			if (!force) {
+				if (compareLocation(that.repository, repository)) return;
+			}
+			that.repository = repository;
+			that.initTitleBar(repository || {});
+			if (repository) {
+				that.preferencesService.getPreferences("/git/settings").then(function(prefs) {  //$NON-NLS-0$
+					prefs.put("lastRepo", {Location: that.repository.Location});  //$NON-NLS-0$
+				});
+				that.repositoriesNavigator.select(that.repository);
+				that.repositoriesSection.setTitle(repository.Name);
+				that.displayBranches(repository); 
+				that.displayConfig(repository, "full"); //$NON-NLS-0$
+				that.setSelectedReference(that.reference);
+			}
+		};
+	
 		if (!repository && this.repositoriesNavigator && this.repositoriesNavigator.model) {
-			repository = this.repositoriesNavigator.model.repositories[0];
+			this.preferencesService.getPreferences("/git/settings").then(function(prefs) {  //$NON-NLS-0$
+				var lastRepo = prefs.get("lastRepo"); //$NON-NLS-0$
+				if (lastRepo) {
+					that.repositoriesNavigator.model.repositories.some(function(repo){
+						if (repo.Location === lastRepo.Location) {
+							repository = repo;
+							return true;
+						}
+						return false;
+					});
+				}
+				if (!repository) {
+					repository = that.repositoriesNavigator.model.repositories[0];
+				}
+				setRepoSelection (repository, force);
+			});
+		} else {
+			setRepoSelection (repository, force);
 		}
-		if (!force) {
-			if (compare(this.repository, repository)) return;
-		}
-		this.repository = repository;
-		this.initTitleBar(repository || {});
-		if (repository) {
-			this.repositoriesNavigator.select(this.repository);
-			this.repositoriesSection.setTitle(repository.Name);
-		}
-		if (repository) {
-			this.displayBranches(repository); 
-			this.displayConfig(repository, "full"); //$NON-NLS-0$
-			this.setSelectedReference(this.reference);
-		}
+		
 	};
 	
 	GitRepositoryExplorer.prototype.setSelectedReference = function(ref) {
@@ -406,7 +441,7 @@ define([
 		var selection = this.repositoriesSelection = new mSelection.Selection(this.registry, "orion.selection.repo"); //$NON-NLS-0$
 		selection.addEventListener("selectionChanged", function(e) { //$NON-NLS-0$
 			var selected = e.selection;
-			if (!selected || compare(this.repository, selected)) return;
+			if (!selected || compareLocation(this.repository, selected)) return;
 			this.changes = this.reference = this.log = null;
 			section.setHidden(true);
 			this.setSelectedRepository(selected);
@@ -456,7 +491,7 @@ define([
 		var selection = this.branchesSelection = new mSelection.Selection(this.registry, "orion.selection.ref"); //$NON-NLS-0$
 		selection.addEventListener("selectionChanged", function(e) { //$NON-NLS-0$
 			var selected = e.selection;
-			if (!selected || compare(this.reference, selected)) return;
+			if (!selected || compareLocation(this.reference, selected)) return;
 			switch (selected.Type) {
 				case "Branch": //$NON-NLS-0$
 				case "RemoteTrackingBranch": //$NON-NLS-0$
@@ -587,7 +622,7 @@ define([
 		var selection = this.commitsSelection = new mSelection.Selection(this.registry, "orion.selection.commit"); //$NON-NLS-0$
 		selection.addEventListener("selectionChanged", function(event) { //$NON-NLS-0$
 			var selected = event.selections;
-			if (compare(this.changes, selected)) return;
+			if (compareLocation(this.changes, selected)) return;
 			this.setSelectedChanges(selected);
 //			window.location.href = require.toUrl(repoTemplate.expand({resource: this.lastResource = selected.Location}));
 		}.bind(this));
@@ -615,6 +650,9 @@ define([
 		this.autoFetch = false;
 		return this.statusDeferred.then(function() {
 			return explorer.display().then(function() {
+				if (!this.reference) {
+					this.reference = this.commitsNavigator.model.getTargetReference();
+				}
 				if (this.changes && this.changes.length) {
 					this.changes.forEach(function(c) {
 						explorer.select(c);
@@ -665,7 +703,7 @@ define([
 		var section = this.configSection = new mSection.Section(parent, {
 			id: "configSection", //$NON-NLS-0$
 			title: "\u200B", //$NON-NLS-0$
-			iconClass: ["core-sprite-gear"], //$NON-NLS-0$
+			iconClass: ["core-sprite-wrench"], //$NON-NLS-0$
 			slideout: true,
 			content: '<div id="configNode" class="configDropdownList mainPadding"></div><div id="dropdownConfigActionsNode" class="sectionDropdownActions toolComposite"></div>', //$NON-NLS-0$
 			canHide: true,

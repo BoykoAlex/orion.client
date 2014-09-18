@@ -284,6 +284,11 @@ define([
 						start = this._getLineStart(text, index); /* backtrack to start of line */
 						newlines = tokens[i].text.match(this._newlineRegex);
 						end = this._getLineEnd(text, index, model, newlines ? newlines.length : 0);
+						this._whitespaceRegex.lastIndex = end;
+						match = this._whitespaceRegex.exec(text);
+						if (match && match.index === end) {
+							end += match[0].length;
+						}
 						name = "markup.raw.code.markdown"; //$NON-NLS-0$
 					}
 
@@ -673,28 +678,28 @@ define([
 			 * in response (instead its bounds were simply adjusted).  As a result the marked
 			 * token will now be stale.  Detect this case and update the token here.
 			 */
-			if (e.old.length === 1 && e.new.length === 1 && e.old[0].elementId === e.new[0].elementId) {
+			if (e.oldBlocks.length === 1 && e.newBlocks.length === 1 && e.oldBlocks[0].elementId === e.newBlocks[0].elementId) {
 				/*
 				 * A change in the root block only occurs when whitespace beyond the last block is
 				 * added/deleted, because the marked lexer groups all other whitespace occurrences
 				 * into adjacent blocks.  If this is a change in the root block then just return,
 				 * there's nothing to do here.
 				 */
-				if (!e.new[0].parent) {
+				if (!e.newBlocks[0].parent) {
 					return;
 				}
 
-				var recomputedBlocks = this.computeBlocks(this.model, this.model.getText(e.old[0].start, e.old[0].end), e.old[0].parent, e.old[0].start);
-				this._adoptTokens(e.new[0], recomputedBlocks[0]);
+				var recomputedBlocks = this.computeBlocks(this.model, this.model.getText(e.oldBlocks[0].start, e.oldBlocks[0].end), e.oldBlocks[0].parent, e.oldBlocks[0].start);
+				this._adoptTokens(e.newBlocks[0], recomputedBlocks[0]);
 			}
 
 			var oldBlocksIndex = 0, parentElement, i, j, children = [];
-			if (e.old.length) {
-				var currentElement = document.getElementById(e.old[0].elementId);
+			if (e.oldBlocks.length) {
+				var currentElement = document.getElementById(e.oldBlocks[0].elementId);
 				parentElement = currentElement.parentElement;
 			} else {
-				if (e.new.length) {
-					parentElement = document.getElementById(e.new[0].parent.elementId);
+				if (e.newBlocks.length) {
+					parentElement = document.getElementById(e.newBlocks[0].parent.elementId);
 				}
 				if (!parentElement) {
 					parentElement = document.getElementById(ID_PREVIEW);
@@ -702,21 +707,21 @@ define([
 			}
 			for (i = 0; i < parentElement.children.length; i++) {
 				if (!currentElement || parentElement.children[i].id === currentElement.id) {
-					for (j = i; j < i + e.old.length; j++) {
+					for (j = i; j < i + e.oldBlocks.length; j++) {
 						children.push(parentElement.children[j]);
 					}
 					break;
 				}
 			}
 
-			e.new.forEach(function(current) {
+			e.newBlocks.forEach(function(current) {
 				/* create a new div with content corresponding to this block */
 				var newElement = document.createElement("div"); //$NON-NLS-0$
 				this._generateHTML(newElement, current);
 
 				/* try to find an existing old block and DOM element corresponding to the current new block */
-				for (i = oldBlocksIndex; i < e.old.length; i++) {
-					if (e.old[i].elementId === current.elementId) {
+				for (i = oldBlocksIndex; i < e.oldBlocks.length; i++) {
+					if (e.oldBlocks[i].elementId === current.elementId) {
 						/*
 						 * Found it.  If any old blocks have been passed over during this search
 						 * then remove their elements from the DOM as they no longer exist.
@@ -733,7 +738,7 @@ define([
 					}
 				}
 
-				if (i === e.old.length) {
+				if (i === e.oldBlocks.length) {
 					/*
 					 * An existing block was not found, so there is not an existing corresponding
 					 * DOM element to reuse.  Create one now.
@@ -756,7 +761,7 @@ define([
 			}.bind(this));
 
 			/* all new blocks have been processed, so remove all remaining old elements that were not reused */
-			for (i = e.old.length - 1; oldBlocksIndex <= i; i--) {
+			for (i = e.oldBlocks.length - 1; oldBlocksIndex <= i; i--) {
 				parentElement.removeChild(children[i]);
 			}
 		},
@@ -861,7 +866,7 @@ define([
 	};
 
 	var _imageCache = {};
-	
+
 	function filterOutputLink(resourceURL, fileClient, isRelative) {
 		return function(cap, link) {
 			if (link.href.indexOf(":") === -1) { //$NON-NLS-0$
@@ -1056,17 +1061,6 @@ define([
 		}.bind(this);
 
 		this._settingsListener = function(e) {
-			var orientation = e.newSettings.splitOrientation === "horizontal" ? mSplitter.ORIENTATION_HORIZONTAL : mSplitter.ORIENTATION_VERTICAL; //$NON-NLS-0$
-			this._splitter.setOrientation(orientation);
-			toggleOrientationCommand.checked = orientation === mSplitter.ORIENTATION_HORIZONTAL;
-
-			/*
-			 * If this is the initial retrieval of these settings then the root
-			 * and splitter elements likely need to have their visibilities updated.
-			 */
-			this._rootDiv.style.visibility = "visible"; //$NON-NLS-0$
-			this._splitterDiv.style.visibility = "visible"; //$NON-NLS-0$
-
 			this._styler.setTabsVisible(e.newSettings.showTabs);
 			this._styler.setSpacesVisible(e.newSettings.showSpaces);
 		}.bind(this);
@@ -1226,22 +1220,15 @@ define([
 			this._previewWrapperDiv.appendChild(this._previewDiv);
 
 			this._editorView.addEventListener("Settings", this._settingsListener); //$NON-NLS-0$
-			var settings = this._editorView.getSettings();
 
 			this._splitter = new mSplitter.Splitter({
 				node: this._splitterDiv,
 				sidePanel: this._editorDiv,
 				mainPanel: this._previewWrapperDiv,
 				toggle: true,
-				closeReversely: true,
-				vertical: settings && settings.splitOrientation === "vertical" //$NON-NLS-0$
+				closeReversely: true
 			});
-
-			if (!settings) {
-				/* hide the content until the split orientation setting has been retrieved */
-				this._rootDiv.style.visibility = "hidden"; //$NON-NLS-0$
-				this._splitterDiv.style.visibility = "hidden"; //$NON-NLS-0$
-			}
+			toggleOrientationCommand.checked = this._splitter.getOrientation() === mSplitter.ORIENTATION_HORIZONTAL;
 
 			BaseEditor.prototype.install.call(this);
 		},
@@ -1472,7 +1459,7 @@ define([
 			callback: function(/*data*/) {
 				this.editor.togglePaneOrientation();
 			}.bind(this),
-			type: "toggle", //$NON-NLS-0$
+			type: "switch", //$NON-NLS-0$
 			imageClass: "core-sprite-split-pane-orientation", //$NON-NLS-0$
 			tooltip: messages["TogglePaneOrientationTooltip"],
 			visibleWhen: function() {

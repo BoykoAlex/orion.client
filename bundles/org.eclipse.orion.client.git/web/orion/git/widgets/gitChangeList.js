@@ -21,10 +21,11 @@ define([
 	'orion/webui/tooltip',
 	'orion/selection',
 	'orion/webui/littlelib',
+	'orion/git/gitCommands',
 	'orion/commands',
 	'orion/git/logic/gitCommit',
 	'orion/objects'
-], function(messages, i18nUtil, Deferred, mExplorer, mGitUIUtil, mGitUtil, mTooltip, mSelection , lib, mCommands, gitCommit, objects) {
+], function(messages, i18nUtil, Deferred, mExplorer, mGitUIUtil, mGitUtil, mTooltip, mSelection , lib, mGitCommands, mCommands, gitCommit, objects) {
 	
 	var interestedUnstagedGroup = [ "Missing", "Modified", "Untracked", "Conflicting" ]; //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 	var interestedStagedGroup = [ "Added", "Changed", "Removed" ]; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
@@ -335,6 +336,23 @@ define([
 		if (this.prefix !== "all") { //$NON-NLS-0$
 			this.updateCommands();
 		}
+		mGitCommands.getModelEventDispatcher().addEventListener("modelChanged", this._modelListener = function(event) { //$NON-NLS-0$
+			switch (event.action) {
+			case "commit": //$NON-NLS-0$
+			case "stash": //$NON-NLS-0$
+				this.messageTextArea.value = ""; //$FALLTHROUGH$
+			case "reset": //$NON-NLS-0$
+			case "applyPatch":  //$NON-NLS-0$
+			case "stage": //$NON-NLS-0$
+			case "unstage": //$NON-NLS-0$
+			case "checkoutFile": //$NON-NLS-0$
+			case "applyStash": //$NON-NLS-0$
+			case "popStash": //$NON-NLS-0$
+			case "ignoreFile": //$NON-NLS-0$
+				this.changedItem(event.items);
+				break;
+			}
+		}.bind(this));
 	}
 	GitChangeListExplorer.prototype = Object.create(mExplorer.Explorer.prototype);
 	objects.mixin(GitChangeListExplorer.prototype, /** @lends orion.git.GitChangeListExplorer.prototype */ {
@@ -342,7 +360,7 @@ define([
 			this.model.repository.status = "";
 			var deferred = new Deferred();
 			if (this.prefix === "all") { //$NON-NLS-0$
-				var parent = items[0].parent;
+				var parent = this.model.root;
 				var commitInfo = this.getCommitInfo();
 				var moreVisible = this.getMoreVisible();
 				var that = this;
@@ -364,10 +382,15 @@ define([
 			return deferred;
 		},
 		destroy: function() {
+			if (this._modelListener) {
+				mGitCommands.getModelEventDispatcher().removeEventListener("modelChanged", this._modelListener); //$NON-NLS-0$
+				this._modelListener = null;
+			}
 			if (this._selectionListener) {
 				this.selection.removeEventListener("selectionChanged", this._selectionListener); //$NON-NLS-0$
 				this._selectionListener = null;
 			}
+			mExplorer.Explorer.prototype.destroy.call(this);
 		},
 		display: function() {
 			var that = this;
@@ -442,6 +465,9 @@ define([
 				this.commandService.destroy(node);
 			}
 
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.openGitDiff", 2000); //$NON-NLS-1$ //$NON-NLS-0$
+			commandRegistry.registerCommandContribution("itemLevelCommands", "eclipse.orion.git.diff.showCurrent", 1000); //$NON-NLS-1$ //$NON-NLS-0$
+
 			if (this.prefix === "staged") { //$NON-NLS-0$
 				commandRegistry.registerCommandContribution(actionsNodeScope, "eclipse.orion.git.commitAndPushCommand", 200, "eclipse.gitCommitGroup"); //$NON-NLS-1$ //$NON-NLS-0$ 
 				commandRegistry.registerCommandContribution(selectionNodeScope, "eclipse.orion.git.unstageCommand", 100); //$NON-NLS-0$
@@ -489,6 +515,11 @@ define([
 		updateSelectionStatus: function(selections) {
 			var count = selections ? selections.length : 0;
 			var msg = i18nUtil.formatMessage(messages[count === 1 ? "FileSelected" : "FilesSelected"], count);
+			if (!count && this.messageTextArea.value) {
+				this.explorerSelectionStatus.classList.add("invalidFileCount"); //$NON-NLS-0$
+			} else {
+				this.explorerSelectionStatus.classList.remove("invalidFileCount"); //$NON-NLS-0$
+			}
 			this.explorerSelectionStatus.textContent = msg;
 		},
 		createCommands: function(){
@@ -664,6 +695,9 @@ define([
 						textArea.classList.add("parameterInput"); //$NON-NLS-0$
 						textArea.addEventListener("keyup", function() { //$NON-NLS-0$
 							textArea.parentNode.classList.remove("invalidParam"); //$NON-NLS-0$
+							if (explorer.prefix === "all") { //$NON-NLS-0$
+								explorer.updateSelectionStatus(explorer.selection.getSelections());
+							}
 						});
 						topRow.appendChild(textArea);
 
@@ -720,7 +754,8 @@ define([
 						explorer.changeIDCheck = createInput(bottomLeft, "changeIDCheck", 'SmartChangeId', null, null, true); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 						amendCheck.addEventListener("change", function() { //$NON-NLS-0$
 							if (amendCheck.checked) {
-								commitLogic.getAmendMessage(explorer.model.repository.CommitLocation).then(function(msg) {
+								var repository = explorer.model.repository;
+								commitLogic.getAmendMessage(repository.ActiveBranch || repository.CommitLocation).then(function(msg) {
 									textArea.value = msg;
 									textArea.parentNode.classList.remove("invalidParam"); //$NON-NLS-0$
 								});
@@ -872,7 +907,12 @@ define([
 						compareWidgetActionWrapper.className = "layoutRight commandList"; //$NON-NLS-0$
 						compareWidgetActionWrapper.id = prefix + "CompareWidgetActionWrapper"; //$NON-NLS-0$
 						actionsWrapper.appendChild(compareWidgetActionWrapper);
-						
+
+						var compareWidgetLeftActionWrapper = document.createElement("ul"); //$NON-NLS-0$
+						compareWidgetLeftActionWrapper.className = "layoutLeft commandList"; //$NON-NLS-0$
+						compareWidgetLeftActionWrapper.id = prefix + "CompareWidgetLeftActionWrapper"; //$NON-NLS-0$
+						actionsWrapper.appendChild(compareWidgetLeftActionWrapper);
+
 						diffActionWrapper = document.createElement("ul"); //$NON-NLS-0$
 						diffActionWrapper.className = "layoutRight commandList"; //$NON-NLS-0$
 						diffActionWrapper.id = prefix + "DiffActionWrapperChange"; //$NON-NLS-0$
@@ -885,23 +925,27 @@ define([
 	
 						navGridHolder = this.explorer.getNavDict() ? this.explorer.getNavDict().getGridNavHolder(item, true) : null;
 						var hasConflict = item.parent.type === "Conflicting"; //$NON-NLS-0$
-						mGitUIUtil.createCompareWidget(
-							explorer.registry,
-							explorer.commandService,
-							item.DiffLocation,
-							hasConflict,
-							diffContainer,
-							compareWidgetActionWrapper.id,
-							explorer.editableInComparePage ? !this.explorer.model.isStaged(item.parent.type) : false,
-							{
-								navGridHolder : navGridHolder,
-								additionalCmdRender : function(gridHolder) {
-									explorer.commandService.destroy(diffActionWrapper.id);
-									explorer.commandService.renderCommands("itemLevelCommands", diffActionWrapper.id, item.parent, explorer, "tool", false, gridHolder); //$NON-NLS-1$ //$NON-NLS-0$
+						window.setTimeout(function() {
+							mGitUIUtil.createCompareWidget(
+								explorer.registry,
+								explorer.commandService,
+								item.DiffLocation,
+								hasConflict,
+								diffContainer,
+								compareWidgetActionWrapper.id,
+								explorer.editableInComparePage ? !this.explorer.model.isStaged(item.parent.type) : false,
+								{
+									navGridHolder : navGridHolder,
+									additionalCmdRender : function(gridHolder) {
+										explorer.commandService.destroy(diffActionWrapper.id);
+										explorer.commandService.renderCommands("itemLevelCommands", diffActionWrapper.id, item.parent, explorer, "tool", false, gridHolder); //$NON-NLS-1$ //$NON-NLS-0$
+									},
+									before : true
 								},
-								before : true
-							}
-						);
+								undefined,
+								compareWidgetLeftActionWrapper.id
+							);
+						}.bind(this), 0);
 					}
 					return td;
 			}

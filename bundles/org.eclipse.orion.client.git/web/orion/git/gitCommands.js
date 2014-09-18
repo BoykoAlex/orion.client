@@ -10,6 +10,7 @@
  ******************************************************************************/
 
 /*eslint-env browser, amd*/
+/*globals confirm*/
 
 define([
 	'i18n!git/nls/gitmessages',
@@ -21,7 +22,6 @@ define([
 	'orion/commands',
 	'orion/commandRegistry',
 	'orion/git/util',
-	'orion/compare/compareUtils',
 	'orion/git/gitPreferenceStorage',
 	'orion/git/gitConfigPreference',
 	'orion/git/widgets/ReviewRequestDialog',
@@ -36,7 +36,7 @@ define([
 	'orion/objects',
 	'orion/URL-shim'
 ], function(
-	messages, require, EventTarget, Deferred, i18nUtil, lib, mCommands, mCommandRegistry, mGitUtil, mCompareUtils, GitPreferenceStorage,
+	messages, require, EventTarget, Deferred, i18nUtil, lib, mCommands, mCommandRegistry, mGitUtil, GitPreferenceStorage,
 	GitConfigPreference, mReviewRequest, mCloneGitRepository, mApplyPatch, PageLinks, URITemplate, mGitCommonLogic, mGitPushLogic, 
 	mGitStashLogic, mGitCommitLogic, objects) {
 
@@ -70,7 +70,7 @@ var exports = {};
 		if (toolbar) {
 			commandRegistry.destroy(toolbar);
 		} else {
-			throw "could not find toolbar " + toolbarId; //$NON-NLS-0$
+			throw new Error("could not find toolbar " + toolbarId); //$NON-NLS-0$
 		}
 		commandRegistry.renderCommands(toolbarId, toolbar, item, explorer, "button");  //$NON-NLS-0$
 		
@@ -103,28 +103,20 @@ var exports = {};
 		}
 	};
 
-	exports.handleKnownHostsError = mGitCommitLogic.handleKnownHostsError;
+	exports.handleKnownHostsError = mGitCommonLogic.handleKnownHostsError;
 
-	exports.handleSshAuthenticationError = mGitCommitLogic.handleSshAuthenticationError;
+	exports.handleSshAuthenticationError = mGitCommonLogic.handleSshAuthenticationError;
 
-	exports.getDefaultSshOptions = mGitCommitLogic.getDefaultSshOptions;
-
-	exports.handleProgressServiceResponse = mGitCommitLogic.handleProgressServiceResponse;
+	exports.handleProgressServiceResponse = mGitCommonLogic.handleProgressServiceResponse;
 
 	exports.gatherSshCredentials = mGitCommonLogic.gatherSshCredentials;
+
+	exports.getDefaultSshOptions = mGitCommonLogic.getDefaultSshOptions;
 	
 	exports.handleGitServiceResponse = mGitCommonLogic.handleGitServiceResponse;
 	
 	exports.createFileCommands = function(serviceRegistry, commandService, explorer, toolbarId) {
 
-		var refresh = function(data) { 
-			if (data && data.handler.changedItem) {
-				data.handler.changedItem();
-			} else { 
-				explorer.changedItem(); 
-			}
-		};
-		
 		function displayErrorOnStatus(error) {
 			var display = {};
 			display.Severity = "Error"; //$NON-NLS-0$
@@ -205,11 +197,11 @@ var exports = {};
 				var messageService = serviceRegistry.getService("orion.page.message"); //$NON-NLS-0$
 				var progressService = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				
-				messageService.setProgressMessage(
-					item.Name ? i18nUtil.formatMessage(messages["Checking out branch ${0}..."], item.Name) : messages["Checking out branch..."]);
+				var msg = item.Name ? i18nUtil.formatMessage(messages["Checking out branch ${0}..."], item.Name) : messages["Checking out branch..."];
+				messageService.setProgressMessage(msg);
 					
 				if (item.Type === "Branch") { //$NON-NLS-0$
-					progressService.progress(service.checkoutBranch(item.CloneLocation, item.Name), "Checking out branch " + item.Name).then(
+					progressService.progress(service.checkoutBranch(item.CloneLocation, item.Name), msg).then(
 						function(){
 							messageService.setProgressResult(messages["Branch checked out."]);
 							dispatchModelEventOn({type: "modelChanged", action: "checkout"}); //$NON-NLS-1$ //$NON-NLS-0$
@@ -226,9 +218,10 @@ var exports = {};
 						branchLocation = item.parent.parent.repository.BranchLocation;
 					}
 					
-					progressService.progress(service.addBranch(branchLocation, null, item.Name), "Adding branch " + item.Name).then(
+					var addMsg = i18nUtil.formatMessage(messages["Adding branch ${0}..."], item.Name);
+					progressService.progress(service.addBranch(branchLocation, null, item.Name), addMsg).then(
 						function(branch){
-							progressService.progress(service.checkoutBranch(branch.CloneLocation, branch.Name), "Checking out branch " + item.Name).then(
+							progressService.progress(service.checkoutBranch(branch.CloneLocation, branch.Name), msg).then(
 								function(){
 									messageService.setProgressResult(messages['Branch checked out.']);
 									dispatchModelEventOn({type: "modelChanged", action: "checkout"}); //$NON-NLS-1$ //$NON-NLS-0$
@@ -262,8 +255,9 @@ var exports = {};
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				
 				var createBranchFunction = function(branchLocation, name) {
-					progress.progress(serviceRegistry.getService("orion.git.provider").addBranch(branchLocation, name), "Adding branch " + name).then(function() { //$NON-NLS-0$
-						refresh(data);
+					var addMsg = i18nUtil.formatMessage(messages["Adding branch ${0}..."], name);
+					progress.progress(serviceRegistry.getService("orion.git.provider").addBranch(branchLocation, name), addMsg).then(function() { //$NON-NLS-0$
+						dispatchModelEventOn({type: "modelChanged", action: "addBranch", branch: name}); //$NON-NLS-1$ //$NON-NLS-0$
 					}, displayErrorOnStatus);
 				};
 				
@@ -293,8 +287,9 @@ var exports = {};
 				var item = data.items;
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				if (confirm(i18nUtil.formatMessage(messages["Are you sure you want to delete branch ${0}?"], item.Name))) {
-					progress.progress(serviceRegistry.getService("orion.git.provider").removeBranch(item.Location), "Removing branch " + item.Name).then(function() { //$NON-NLS-0$
-						refresh(data);
+					var msg = i18nUtil.formatMessage(messages["Removing branch ${0}..."], item.Name);
+					progress.progress(serviceRegistry.getService("orion.git.provider").removeBranch(item.Location), msg).then(function() { //$NON-NLS-0$
+						dispatchModelEventOn({type: "modelChanged", action: "removeBranch", branch: item}); //$NON-NLS-1$ //$NON-NLS-0$
 					}, displayErrorOnStatus);
 				}
 			},
@@ -312,7 +307,7 @@ var exports = {};
 			callback: function(data) {
 				var item = data.items;
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				if(confirm(i18nUtil.formatMessage(messages["You're going to delete remote branch ${0} and push the change."], item.Name)+"\n\n" + messages["Are you sure?"])) //$NON-NLS-1$
+				if(confirm(i18nUtil.formatMessage(messages["RemoveRemoteBranchConfirm"], item.Name))) //$NON-NLS-1$
 				exports.getDefaultSshOptions(serviceRegistry, item).then(function(options){
 					var func = arguments.callee;
 					var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
@@ -324,9 +319,9 @@ var exports = {};
 					deferred.then(function(remoteJsonData) {
 						exports.handleProgressServiceResponse(remoteJsonData, options, serviceRegistry, function(jsonData) {
 							if (!jsonData || jsonData.Result.Severity === "Ok") //$NON-NLS-0$
-								refresh(data);
+								dispatchModelEventOn({type: "modelChanged", action: "removeBranch", branch: item}); //$NON-NLS-1$ //$NON-NLS-0$
 						}, func, messages["Delete Remote Branch"]);
-					}, function(jsonData, secondArg) {
+					}, function(jsonData) {
 						exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function() {}, func, messages['Removing remote branch: '] + item.Name);
 					});
 				});
@@ -350,8 +345,9 @@ var exports = {};
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				
 				var createRemoteFunction = function(remoteLocation, name, url) {
-					progress.progress(serviceRegistry.getService("orion.git.provider").addRemote(remoteLocation, name, url), "Adding remote " + remoteLocation).then(function() { //$NON-NLS-0$
-						refresh(data);
+					var msg = i18nUtil.formatMessage(messages["Adding remote ${0}..."], remoteLocation);
+					progress.progress(serviceRegistry.getService("orion.git.provider").addRemote(remoteLocation, name, url), msg).then(function() { //$NON-NLS-0$
+						dispatchModelEventOn({type: "modelChanged", action: "addRemote", remote: name}); //$NON-NLS-1$ //$NON-NLS-0$
 					}, displayErrorOnStatus);
 				};
 				
@@ -381,8 +377,9 @@ var exports = {};
 				var item = data.items;
 				if (confirm(i18nUtil.formatMessage(messages["Are you sure you want to delete remote ${0}?"], item.Name))) {
 					var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-					progress.progress(serviceRegistry.getService("orion.git.provider").removeRemote(item.Location), "Removing remote " + item.Name).then(function() { //$NON-NLS-0$
-						refresh(data);
+					var msg = i18nUtil.formatMessage(messages["Removing remote ${0}..."], item.Name);
+					progress.progress(serviceRegistry.getService("orion.git.provider").removeRemote(item.Location), msg).then(function() { //$NON-NLS-0$
+						dispatchModelEventOn({type: "modelChanged", action: "removeRemote", remote: item}); //$NON-NLS-1$ //$NON-NLS-0$
 					}, displayErrorOnStatus);
 				}
 			},
@@ -417,17 +414,17 @@ var exports = {};
 					statusService.createProgressMonitor(pullDeferred, messages["Pulling: "] + name);
 					var pullOperationLocation;
 					pullDeferred.then(function(jsonData) {
-						exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function(jsonData) {
+						exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function() {
 							if (item.Type === "Clone") { //$NON-NLS-0$
-								explorer.changedItem(item);
+								dispatchModelEventOn({type: "modelChanged", action: "pull", item: item}); //$NON-NLS-1$ //$NON-NLS-0$
 							}
 						}, func, "Pull Git Repository"); //$NON-NLS-0$
-					}, function(jsonData, secondArg) {
+					}, function(jsonData) {
 						if(pullOperationLocation)
 							jsonData.failedOperation = pullOperationLocation;
 						exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, 
 							function() {
-								explorer.changedItem(item);
+								dispatchModelEventOn({type: "modelChanged", action: "pull", item: item}); //$NON-NLS-1$ //$NON-NLS-0$
 							}, func, messages["Pull Git Repository"]);
 					}, function(operation){
 						pullOperationLocation = operation.Location;
@@ -455,40 +452,6 @@ var exports = {};
 		});
 		commandService.addCommand(openCloneContent);
 
-		var compareGitCommits = new mCommands.Command({
-			name : messages["Compare With Each Other"],
-			id : "eclipse.compareGitCommits", //$NON-NLS-0$
-			hrefCallback : function(data) {
-				var item = data.items;
-				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				return progress.progress(serviceRegistry.getService("orion.git.provider").getDiff(item[1].DiffLocation, item[0].Name), "Generating Diff for " + item[0].Name + " and " + item[1].Name).then(function(diffLocation) {
-					return mCompareUtils.generateCompareHref(diffLocation.Location, {readonly: true});
-				});
-			},
-			visibleWhen : function(item) {
-				if(explorer.isDirectory) return false;
-				if (Array.isArray(item) && item.length === 2 && item[0].Type === "Commit" && item[1].Type === "Commit") { //$NON-NLS-1$ //$NON-NLS-0$
-						return true;
-				}
-				return false;
-			}
-		});
-		commandService.addCommand(compareGitCommits);
-
-		var compareWithWorkingTree = new mCommands.Command({
-			name : messages["Compare With Working Tree"],
-			imageClass: "git-sprite-compare", //$NON-NLS-0$
-			spriteClass: "gitCommandSprite", //$NON-NLS-0$
-			id : "eclipse.compareWithWorkingTree", //$NON-NLS-0$
-			hrefCallback : function(data) {
-				return mCompareUtils.generateCompareHref(data.items.DiffLocation, {});
-			},
-			visibleWhen : function(item) {
-				return item.Type === "Commit" && item.ContentLocation !== null && !explorer.isDirectory; //$NON-NLS-0$
-			}
-		});
-		commandService.addCommand(compareWithWorkingTree);
-		
 		var showDiffCommand = new mCommands.Command({ 
 			name: messages["Working Directory Version"],
 			tooltip: messages["View the working directory version of the file"],
@@ -540,10 +503,16 @@ var exports = {};
 
 			var item = data.items;
 			var noAuth = false;
-			if (item.LocalBranch && item.RemoteBranch) {
+			if (item.LocalBranch && item.Remote) {
 				noAuth = item.noAuth;
-				item = item.RemoteBranch;
+				item = item.Remote;
 			}
+			
+			if (item.Remote) {
+				noAuth = item.noAuth;
+				item = item.Remote;
+			}
+			
 			var path = item.Location;
 			var name = item.Name;
 			var commandInvocation = data;
@@ -582,7 +551,6 @@ var exports = {};
 				}
 			};
 			
-			// HACK wrap logic into function
 			var fetchLogic = function(){
 				if (commandInvocation.parameters && commandInvocation.parameters.optionsRequested){
 					commandInvocation.parameters = null;
@@ -637,29 +605,12 @@ var exports = {};
 				);
 			};
 			
-			//TODO HACK remoteTrackingBranch does not provide git url - we have to collect manually
-			if(!commandInvocation.items.GitUrl){
-				// have to determine manually
-				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
-				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				progress.progress(gitService.getGitRemote(path), "Getting remote details " + name).then(
-					function(resp){
-						progress.progress(gitService.getGitClone(resp.CloneLocation), "Getting git repository information " + resp.Name).then(
-							function(resp){
-								commandInvocation.items.GitUrl = resp.Children[0].GitUrl;
-								fetchLogic();
-							}, displayErrorOnStatus
-						);
-					}, displayErrorOnStatus
-				);
-			} else {
-				fetchLogic();
-			}
+			fetchLogic();
 			return d;
 		};
 		var fetchVisibleWhen = function(item) {
-			if (item.LocalBranch && item.RemoteBranch) {
-				item = item.RemoteBranch;
+			if (item.LocalBranch && item.Remote) {
+				item = item.Remote;
 			}
 			if (item.Type === "RemoteTrackingBranch" && item.Id) //$NON-NLS-0$
 				return true;
@@ -678,7 +629,7 @@ var exports = {};
 			id: "eclipse.orion.git.fetch", //$NON-NLS-0$
 			callback: function(data) {
 				return fetchCallback(data, false).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "fetch", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen: fetchVisibleWhen
@@ -693,12 +644,15 @@ var exports = {};
 			id: "eclipse.orion.git.fetchRemote", //$NON-NLS-0$
 			callback: function(data) {
 				return fetchCallback(data, false).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "fetch", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen: function(item) {
-				if (item.LocalBranch && item.RemoteBranch) {
-					item = item.RemoteBranch;
+				if (item.LocalBranch && item.Remote) {
+					item = item.Remote;
+				}
+				if (item.Remote) {
+					item = item.Remote;
 				}
 				if (item.Type === "Remote") //$NON-NLS-0$
 					return true;
@@ -716,7 +670,7 @@ var exports = {};
 			callback: function(data) {
 				var confirm = messages["You're going to override content of the remote tracking branch. This can cause the branch to lose commits."]+"\n\n"+messages['Are you sure?']; //$NON-NLS-0$
 				fetchCallback(data, true, confirm).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "fetch", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen : fetchVisibleWhen
@@ -734,7 +688,8 @@ var exports = {};
 				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				var progressService = serviceRegistry.getService("orion.page.message"); //$NON-NLS-0$
-				progress.progress(gitService.doMerge(item.HeadLocation, item.Name, false), "Merging " + item.Name).then(function(result){
+				var msg = i18nUtil.formatMessage(messages["Merging ${0}"], item.Name);
+				progress.progress(gitService.doMerge(item.HeadLocation, item.Name, false), msg).then(function(result){
 					var display = {};
 
 					if (result.Result === "FAST_FORWARD" || result.Result === "ALREADY_UP_TO_DATE"){ //$NON-NLS-1$ //$NON-NLS-0$
@@ -750,14 +705,14 @@ var exports = {};
 							var isFirstPath = true;
 							for(var path in result.FailingPaths){
 								if(!isFirstPath){
-									paths+=", ";
+									paths+=", "; //$NON-NLS-0$
 								}
 								isFirstPath = false;
 								paths+=path;
 							}
 							if(!isFirstPath){
 								display.Severity = "Error"; //$NON-NLS-0$
-								display.Message+= ". " + i18nUtil.formatMessage(messages['Failing paths: ${0}'], paths);
+								display.Message+= ". " + i18nUtil.formatMessage(messages['Failing paths: ${0}'], paths); //$NON-NLS-0$
 							}
 						}
 						display.Message += "</span>"; //$NON-NLS-0$
@@ -774,14 +729,15 @@ var exports = {};
 					}
 
 					progressService.setProgressResult(display);
-					explorer.changedItem(item);
+					dispatchModelEventOn({type: "modelChanged", action: "merge", item: item}); //$NON-NLS-1$ //$NON-NLS-0$
 				}, function (error, ioArgs) {
+					error = null;//hide warning
 					var display = {};
 					display.Severity = "Error"; //$NON-NLS-0$
 					display.HTML = true;
 					display.Message = "<span>" + JSON.stringify(ioArgs.xhr.responseText).DetailedMessage  + "</span>"; //$NON-NLS-1$ //$NON-NLS-0$
 					serviceRegistry.getService("orion.page.message").setProgressResult(display); //$NON-NLS-0$
-					explorer.changedItem(item);
+					dispatchModelEventOn({type: "modelChanged", action: "merge", item: item, failed: true}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen : function(item) {
@@ -807,7 +763,8 @@ var exports = {};
 				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				var progressService = serviceRegistry.getService("orion.page.message"); //$NON-NLS-0$
-				progress.progress(gitService.doMerge(item.HeadLocation, item.Name, true), "Merging " + item.Name).then(function(result){
+				var msg = i18nUtil.formatMessage(messages["Merging ${0}"], item.Name);
+				progress.progress(gitService.doMerge(item.HeadLocation, item.Name, true), msg).then(function(result){
 					var display = [];
 
 					if (result.Result === "FAST_FORWARD_SQUASHED" || result.Result === "ALREADY_UP_TO_DATE"){ //$NON-NLS-1$ //$NON-NLS-0$
@@ -831,15 +788,16 @@ var exports = {};
 					}
 
 					progressService.setProgressResult(display);
-					explorer.changedItem(item);
+					dispatchModelEventOn({type: "modelChanged", action: "mergeSquash", item: item}); //$NON-NLS-1$ //$NON-NLS-0$
 				}, function (error, ioArgs) {
+					error = null;//hide warning
 					var display = [];
 					display.Severity = "Error"; //$NON-NLS-0$
 					display.HTML = true;
 					display.Message = "<span>" + JSON.stringify(ioArgs.xhr.responseText).DetailedMessage + ".</span>"; //$NON-NLS-1$ //$NON-NLS-0$
 					
 					serviceRegistry.getService("orion.page.message").setProgressResult(display); //$NON-NLS-0$
-					explorer.changedItem(item);
+					dispatchModelEventOn({type: "modelChanged", action: "mergeSquash", item: item, failed: true}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen : function(item) {
@@ -857,8 +815,8 @@ var exports = {};
 		var rebaseCallback = function(data) {
 			var d = new Deferred();
 			var item = data.items;
-			if (item.LocalBranch && item.RemoteBranch) {
-				item = item.RemoteBranch;
+			if (item.LocalBranch && item.Remote) {
+				item = item.Remote;
 			}
 			var progressService = serviceRegistry.getService("orion.page.message"); //$NON-NLS-0$
 			var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
@@ -914,16 +872,13 @@ var exports = {};
 			spriteClass: "gitCommandSprite", //$NON-NLS-0$
 			callback: function(data) {
 				rebaseCallback(data).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "rebase", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				}, function() {
-					refresh();
+					dispatchModelEventOn({type: "modelChanged", action: "rebase", item: data.items, failed: true}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen : function(item) {
-				this.tooltip = messages["Rebase your commits by removing them from the active branch, "] +
-					messages["starting the active branch again based on the latest state of '"] + item.Name + "' " +  //$NON-NLS-1$
-					messages["and applying each commit again to the updated active branch."];
-
+				this.tooltip = i18nUtil.formatMessage(messages["RebaseTip"], item.Name);
 				return (item.Type === "RemoteTrackingBranch" && item.Id) || (item.Type === "Branch" && !item.Current); //$NON-NLS-1$ //$NON-NLS-0$
 			}
 		});
@@ -941,8 +896,8 @@ var exports = {};
 		var pushCallbackNoTagsForce = mGitPushLogic(objects.mixin(pushOptions, {tags: false, force: true})).perform;
 		var pushCallbackGerrit = mGitPushLogic(objects.mixin(pushOptions, {tags: false, force: false, gerrit: true})).perform;
 		var pushVisibleWhen = function(item) {
-			if (item.LocalBranch && item.RemoteBranch) {
-				if (item.RemoteBranch.Type !== "RemoteTrackingBranch") { //$NON-NLS-0$
+			if (item.LocalBranch && item.Remote) {
+				if (item.Remote.Type !== "RemoteTrackingBranch") { //$NON-NLS-0$
 					return false;
 				}
 				item = item.LocalBranch;
@@ -964,12 +919,22 @@ var exports = {};
 			id : "eclipse.orion.git.sync", //$NON-NLS-0$
 			callback: function(data) {
 				return fetchCallback(data).then(function() {
-					return rebaseCallback(data).then(function(jsonData) {
-						return pushCallbackTags(data).then(function() {
-							refresh(data);
+					return rebaseCallback(data).then(function() {
+						var progressService = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
+						var service = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
+						var item = data.items;
+						progressService.progress(service.getLog(item.Remote.CommitLocation, item.LocalBranch.Name), messages['Getting outgoing commits']).then(function(resp) {
+							var done = function() {
+								dispatchModelEventOn({type: "modelChanged", action: "sync", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
+							};
+							if (resp.Children.length > 0) {
+								return pushCallbackTags(data).then(done);
+							} else {
+								done();
+							}
 						});
 					}, function() {
-						refresh();
+						dispatchModelEventOn({type: "modelChanged", action: "rebase", item: data.items, failed: true}); //$NON-NLS-1$ //$NON-NLS-0$
 					});
 				});
 			},
@@ -985,7 +950,7 @@ var exports = {};
 			id : "eclipse.orion.git.push", //$NON-NLS-0$
 			callback: function(data) {
 				pushCallbackTags(data).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "push", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen: pushVisibleWhen
@@ -1000,7 +965,7 @@ var exports = {};
 			id : "eclipse.orion.git.pushBranch", //$NON-NLS-0$
 			callback:  function(data) {
 				pushCallbackNoTags(data).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "push", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen: pushVisibleWhen
@@ -1015,11 +980,11 @@ var exports = {};
 			id : "eclipse.orion.git.pushToGerrit", //$NON-NLS-0$
 			callback:  function(data) {
 				pushCallbackGerrit(data).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "push", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen: function(item) {
-				if (item.LocalBranch && item.RemoteBranch) {
+				if (item.LocalBranch && item.Remote) {
 					item = item.LocalBranch;
 				}
 				if (item.toRef)
@@ -1028,7 +993,7 @@ var exports = {};
 						&& item.toRef.RemoteLocation[0].IsGerrit;
 				else
 					// for action in the repo view
-					return item.Type === "Branch" && item.Current && item.RemoteLocation && item.RemoteLocation[0].IsGerrit; //$NON-NLS-0$
+					return item.Type === "Branch" && item.Current && item.RemoteLocation && item.RemoteLocation[0] && item.RemoteLocation[0].IsGerrit; //$NON-NLS-0$
 
 			}
 		});
@@ -1042,7 +1007,7 @@ var exports = {};
 			id : "eclipse.orion.git.pushForce", //$NON-NLS-0$
 			callback: function(data) {
 				pushCallbackTagsForce(data).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "push", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen: pushVisibleWhen
@@ -1057,7 +1022,7 @@ var exports = {};
 			id : "eclipse.orion.git.pushForceBranch", //$NON-NLS-0$
 			callback: function(data) {
 				pushCallbackNoTagsForce(data).then(function() {
-					refresh(data);
+					dispatchModelEventOn({type: "modelChanged", action: "push", item: data.items}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
 			visibleWhen: pushVisibleWhen
@@ -1076,20 +1041,20 @@ var exports = {};
 				}
 			}
 				
-			var item = data.items;
 			if(confirm(i18nUtil.formatMessage(message, refId))) { //$NON-NLS-0$
 				var service = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var progressService = serviceRegistry.getService("orion.page.message"); //$NON-NLS-0$
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				var deferred = progress.progress(service.resetIndex(location, refId, mode), "Resetting git index for " + refId);
+				var msg = i18nUtil.formatMessage(messages["Resetting git index for ${0}"], refId);
+				var deferred = progress.progress(service.resetIndex(location, refId, mode), msg);
 				progressService.createProgressMonitor(deferred, messages["Resetting index..."]);
 				deferred.then(
-					function(result){
+					function(){
 						var display = {};
 						display.Severity = "Info"; //$NON-NLS-0$
 						display.HTML = false;
-						display.Message = "Ok"; //$NON-NLS-0$
-						explorer.changedItem(item);
+						display.Message = messages["OK"];
+						dispatchModelEventOn({type: "modelChanged", action: "reset", mode: mode}); //$NON-NLS-1$ //$NON-NLS-0$
 						progressService.setProgressResult(display);
 					}, function (error){
 						var display = {};
@@ -1101,7 +1066,7 @@ var exports = {};
 				);
 			}
 		};
-		
+
 		var resetIndexCommand = new mCommands.Command({
 			name : messages['Reset'],
 			tooltip: messages["Reset your active branch to the state of the selected ref. Discard all staged and unstaged changes."],
@@ -1127,7 +1092,7 @@ var exports = {};
 				resetCallback(data, "HEAD^", "SOFT", messages["UndoConfirm"]); //$NON-NLS-1$ //$NON-NLS-0$
 			},
 			visibleWhen : function(item) {
-				return item.Type === "Commit" && item.parent && item.parent.Type === "Outgoing" && item.parent.children && item.parent.children[0].Name === item.Name; //$NON-NLS-0$
+				return item.Type === "Commit" && item.parent && item.parent.Type === "Outgoing" && item.parent.children && item.parent.children[0].Name === item.Name; //$NON-NLS-1$ //$NON-NLS-0$
 			}
 		});
 		commandService.addCommand(undoCommand);
@@ -1146,8 +1111,9 @@ var exports = {};
 				
 				var createTagFunction = function(commitLocation, tagName) {
 					var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-					progress.progress(serviceRegistry.getService("orion.git.provider").doAddTag(commitLocation, tagName), "Adding tag " + tagName).then(function() { //$NON-NLS-0$
-						explorer.changedItem(item);
+					var msg = i18nUtil.formatMessage(messages["Adding tag {$0}"], tagName);
+					progress.progress(serviceRegistry.getService("orion.git.provider").doAddTag(commitLocation, tagName), msg).then(function() { //$NON-NLS-0$
+						dispatchModelEventOn({type: "modelChanged", action: "addTag", commit: item, tag: tagName}); //$NON-NLS-1$ //$NON-NLS-0$
 					}, displayErrorOnStatus);
 				};
 				
@@ -1172,8 +1138,9 @@ var exports = {};
 				var item = data.items;
 				if (confirm(i18nUtil.formatMessage(messages["Are you sure you want to delete tag ${0}?"], item.Name))) {
 					var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-					progress.progress(serviceRegistry.getService("orion.git.provider").doRemoveTag(item.Location), "Removing tag " + item.Name).then(function() { //$NON-NLS-0$
-						explorer.changedItem(item.parent);
+					var msg = i18nUtil.formatMessage(messages["Removing tag {$0}"], item.Name);
+					progress.progress(serviceRegistry.getService("orion.git.provider").doRemoveTag(item.Location), msg).then(function() { //$NON-NLS-0$
+						dispatchModelEventOn({type: "modelChanged", action: "removeTag", tag: item}); //$NON-NLS-1$ //$NON-NLS-0$
 					}, displayErrorOnStatus);
 				}
 			},
@@ -1184,7 +1151,6 @@ var exports = {};
 		commandService.addCommand(removeTagCommand);
 		
 		var notificationParameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter('reviewer', 'text', messages["Reviewer name"])], {hasOptionalParameters: true}); //$NON-NLS-1$ //$NON-NLS-0$
-		
 
 		var askForReviewCommand = new mCommands.Command({
 			name : messages["Ask for review"],
@@ -1273,7 +1239,8 @@ var exports = {};
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				var service = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var headLocation = item.Location.replace(item.Name, "HEAD"); //$NON-NLS-0$
-				progress.progress(service.doCherryPick(headLocation, item.Name), "Cherry picking " + item.Name).then(function(jsonData) {
+				var msg = i18nUtil.formatMessage(messages["CherryPicking"], item.Name);
+				progress.progress(service.doCherryPick(headLocation, item.Name), msg).then(function(jsonData) {
 					var display = {};
 					if (jsonData.Result === "OK") { //$NON-NLS-0$
 						// operation succeeded
@@ -1290,7 +1257,7 @@ var exports = {};
 					else if (jsonData.Result === "CONFLICTING") { //$NON-NLS-0$
 						display.Severity = "Warning"; //$NON-NLS-0$
 						display.HTML = true;
-						display.Message = "<span>" + jsonData.Result + messages[". Some conflicts occurred"] +"</span>"; //$NON-NLS-0$
+						display.Message = "<span>" + jsonData.Result + messages[". Some conflicts occurred"] +"</span>"; //$NON-NLS-1$ //$NON-NLS-0$
 					} else if (jsonData.Result === "FAILED") { //$NON-NLS-0$
 						display.Severity = "Error"; //$NON-NLS-0$
 						display.HTML = true;
@@ -1300,14 +1267,14 @@ var exports = {};
 							var isFirstPath = true;
 							for(var path in jsonData.FailingPaths){
 								if(!isFirstPath){
-									paths+=", ";
+									paths+=", "; //$NON-NLS-0$
 								}
 								isFirstPath = false;
 								paths +=path;
 							}
 							if(!isFirstPath){
-								display.Message+= ". " + i18nUtil.formatMessage(messages['Failing paths: ${0}'], paths);
-								}
+								display.Message+= ". " + i18nUtil.formatMessage(messages['Failing paths: ${0}'], paths); //$NON-NLS-0$
+							}
 						}
 						display.Message += "</span>"; //$NON-NLS-0$
 					}
@@ -1339,7 +1306,8 @@ var exports = {};
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				var service = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var headLocation = item.Location.replace(item.Name, "HEAD"); //$NON-NLS-0$
-				progress.progress(service.doRevert(headLocation, item.Name), "Reverting " + item.Name).then(function(jsonData) {
+				var msg = i18nUtil.formatMessage(messages["RevertingCommit"], item.Name);
+				progress.progress(service.doRevert(headLocation, item.Name), msg).then(function(jsonData) {
 					var display = [];
 					if (jsonData.Result === "OK") { //$NON-NLS-0$
 						// operation succeeded
@@ -1373,15 +1341,8 @@ var exports = {};
 	
 
 	exports.createGitClonesCommands = function(serviceRegistry, commandService, explorer, toolbarId, selectionTools, fileClient) {
-		
-		var refresh = function(data) { 
-			if (data && data.handler.changedItem) {
-				data.handler.changedItem();
-			} else { 
-				explorer.changedItem(); 
-			}
-		};
-		
+		toolbarId = selectionTools = null;//make warning go away
+
 		function displayErrorOnStatus(error) {
 			var display = {};
 			display.Severity = "Error"; //$NON-NLS-0$
@@ -1412,10 +1373,13 @@ var exports = {};
 				var item = data.items;
 				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				if (data.parameters.valueFor("key") && data.parameters.valueFor("value")){ //$NON-NLS-1$ //$NON-NLS-0$
-					progress.progress(gitService.addCloneConfigurationProperty(item.ConfigLocation, data.parameters.valueFor("key"), data.parameters.valueFor("value")), "Setting configuration propetry: " + data.parameters.valueFor("key")).then( //$NON-NLS-1$ //$NON-NLS-0$
-						function(jsonData){
-							refresh(data);
+				var key = data.parameters.valueFor("key"); //$NON-NLS-0$
+				var value = data.parameters.valueFor("value"); //$NON-NLS-0$
+				if (key && value){
+					var msg = i18nUtil.formatMessage(messages["AddingConfig"], key, value);
+					progress.progress(gitService.addCloneConfigurationProperty(item.ConfigLocation, key, value), msg).then(
+						function(){
+							dispatchModelEventOn({type: "modelChanged", action: "addConfig", key: key, value: value}); //$NON-NLS-1$ //$NON-NLS-0$
 						}, displayErrorOnStatus
 					);
 				}
@@ -1442,10 +1406,13 @@ var exports = {};
 				var item = data.items;
 				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				if (data.parameters.valueFor("value")){ //$NON-NLS-0$
-					progress.progress(gitService.editCloneConfigurationProperty(item.Location, data.parameters.valueFor("value")), "Editing configuration property " + item.Key).then( //$NON-NLS-0$
-						function(jsonData){
-							refresh(data);
+				var key = item.Key;
+				var value = data.parameters.valueFor("value"); //$NON-NLS-0$
+				if (value){ //$NON-NLS-0$
+					var msg = i18nUtil.formatMessage(messages["EditingConfig"], key, value);
+					progress.progress(gitService.editCloneConfigurationProperty(item.Location, value), msg).then(
+						function(){
+							dispatchModelEventOn({type: "modelChanged", action: "editConfig", key: key, value: value}); //$NON-NLS-1$ //$NON-NLS-0$
 						}, displayErrorOnStatus
 					);
 				}
@@ -1465,10 +1432,13 @@ var exports = {};
 				var item = data.items;
 				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				if (confirm(i18nUtil.formatMessage(messages["Are you sure you want to delete ${0}?"], item.Key))) {
-					progress.progress(gitService.deleteCloneConfigurationProperty(item.Location), "Deleting configuration property " + item.Key).then(
-						function(jsonData) {
-							refresh(data);
+				var key = item.Key;
+				var value = item.Value;
+				if (confirm(i18nUtil.formatMessage(messages["Are you sure you want to delete ${0}?"], key))) {
+					var msg = i18nUtil.formatMessage(messages["DeletingConfig"], key);
+					progress.progress(gitService.deleteCloneConfigurationProperty(item.Location), msg).then(
+						function() {
+							dispatchModelEventOn({type: "modelChanged", action: "deleteConfig", key: key, value: value}); //$NON-NLS-1$ //$NON-NLS-0$
 						}, displayErrorOnStatus
 					);
 				}
@@ -1567,58 +1537,61 @@ var exports = {};
 					});
 				}
 			},
-			visibleWhen : function(item) {
+			visibleWhen : function() {
 				return true;
 			}
 		});
 		commandService.addCommand(createGitProjectCommand);
+		
+		var cloneCallback = function(data) {
+			var item = data.items;
+			
+			var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
+			var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
+			var cloneFunction = function(gitUrl, path, name) {
+				
+				item.GitUrl = gitUrl;
+				exports.getDefaultSshOptions(serviceRegistry, item).then(function(options) {
+					var func = arguments.callee;
+					var gitConfigPreference = new GitConfigPreference(serviceRegistry);
+					gitConfigPreference.getConfig().then(function(userInfo){
+						var msg = i18nUtil.formatMessage(messages["AddClone"], name);
+						var deferred = progress.progress(gitService.cloneGitRepository(name, gitUrl, path, explorer.defaultPath, options.gitSshUsername, options.gitSshPassword, options.knownHosts, //$NON-NLS-0$
+								options.gitPrivateKey, options.gitPassphrase, userInfo), msg);
+						serviceRegistry.getService("orion.page.message").createProgressMonitor(deferred, //$NON-NLS-0$
+								messages["Cloning repository: "] + gitUrl);
+						deferred.then(function(jsonData) {
+							exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function() {
+								dispatchModelEventOn({type: "modelChanged", action: "addClone", name: name, gitUrl: gitUrl}); //$NON-NLS-1$ //$NON-NLS-0$
+							}, func, messages['Clone Git Repository']);
+						}, function(jsonData) {
+							exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function() {}, func, messages['Clone Git Repository']);
+						});
+					});
+				});
+			};
+			if (data.parameters.valueFor("url") && !data.parameters.optionsRequested) { //$NON-NLS-0$
+				cloneFunction(data.parameters.valueFor("url")); //$NON-NLS-0$
+			} else {
+				var dialog = new mCloneGitRepository.CloneGitRepositoryDialog({
+					serviceRegistry: serviceRegistry,
+					fileClient: fileClient,
+					url: data.parameters.valueFor("url"), //$NON-NLS-0$
+					alwaysShowAdvanced: data.parameters.optionsRequested,
+					func: cloneFunction
+				});
+						
+				dialog.show();
+			}
+		};
 
 		var cloneGitRepositoryCommand = new mCommands.Command({
 			name : messages["Clone Repository"],
 			tooltip : messages["Clone an existing Git repository to a folder"],
 			id : "eclipse.cloneGitRepository", //$NON-NLS-0$
 			parameters: cloneParameters,
-			callback : function(data) {
-				var item = data.items;
-				
-				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
-				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				var cloneFunction = function(gitUrl, path, name) {
-					
-					item.GitUrl = gitUrl;
-					exports.getDefaultSshOptions(serviceRegistry, item).then(function(options) {
-						var func = arguments.callee;
-						var gitConfigPreference = new GitConfigPreference(serviceRegistry);
-						gitConfigPreference.getConfig().then(function(userInfo){
-							var deferred = progress.progress(gitService.cloneGitRepository(name, gitUrl, path, explorer.defaultPath, options.gitSshUsername, options.gitSshPassword, options.knownHosts, //$NON-NLS-0$
-									options.gitPrivateKey, options.gitPassphrase, userInfo), "Cloning repository " + name);
-							serviceRegistry.getService("orion.page.message").createProgressMonitor(deferred,
-									messages["Cloning repository: "] + gitUrl);
-							deferred.then(function(jsonData, secondArg) {
-								exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function(jsonData) {
-									refresh(data);
-								}, func, messages['Clone Git Repository']);
-							}, function(jsonData, secondArg) {
-								exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function() {}, func, messages['Clone Git Repository']);
-							});
-						});
-					});
-				};
-				if (data.parameters.valueFor("url") && !data.parameters.optionsRequested) { //$NON-NLS-0$
-					cloneFunction(data.parameters.valueFor("url")); //$NON-NLS-0$
-				} else {
-					var dialog = new mCloneGitRepository.CloneGitRepositoryDialog({
-						serviceRegistry: serviceRegistry,
-						fileClient: fileClient,
-						url: data.parameters.valueFor("url"), //$NON-NLS-0$
-						alwaysShowAdvanced: data.parameters.optionsRequested,
-						func: cloneFunction
-					});
-							
-					dialog.show();
-				}
-			},
-			visibleWhen : function(item) {
+			callback : cloneCallback,
+			visibleWhen : function() {
 				return true;
 			}
 		});
@@ -1629,43 +1602,8 @@ var exports = {};
 			tooltip : messages["Clone an existing Git repository to a folder"],
 			id : "eclipse.cloneGitRepositoryReviewReq", //$NON-NLS-0$
 			//parameters: cloneParameters,
-			callback : function(data) {
-				var item = data.items;
-				
-				var gitService = serviceRegistry.getService("orion.git.provider"); //$NON-NLS-0$
-				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-				var cloneFunction = function(gitUrl, path, name) {
-					
-					item.GitUrl = gitUrl;
-					exports.getDefaultSshOptions(serviceRegistry, item).then(function(options) {
-						var func = arguments.callee;
-						var gitConfigPreference = new GitConfigPreference(serviceRegistry);
-						gitConfigPreference.getConfig().then(function(userInfo){
-							var deferred = progress.progress(gitService.cloneGitRepository(name, gitUrl, path, explorer.defaultPath, options.gitSshUsername, options.gitSshPassword, options.knownHosts, //$NON-NLS-0$
-									options.gitPrivateKey, options.gitPassphrase, userInfo), "Cloning git repository " + name);
-							serviceRegistry.getService("orion.page.message").createProgressMonitor(deferred,
-									messages["Cloning repository: "] + gitUrl);
-							deferred.then(function(jsonData, secondArg) {
-								exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function(jsonData) {
-									refresh(data);
-								}, func, messages['Clone Git Repository']);
-							}, function(jsonData, secondArg) {
-								exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function() {}, func, messages['Clone Git Repository']);
-							});
-						});
-					});
-				};
-				var dialog = new mCloneGitRepository.CloneGitRepositoryDialog({
-					serviceRegistry: serviceRegistry,
-					fileClient: fileClient,
-					url: data.userData,
-					alwaysShowAdvanced: false,
-					func: cloneFunction
-				});
-						
-				dialog.show();
-			},
-			visibleWhen : function(item) {
+			callback : cloneCallback,
+			visibleWhen : function() {
 				return true;
 			}
 		});
@@ -1679,8 +1617,8 @@ var exports = {};
 			spriteClass: "gitCommandSprite", //$NON-NLS-0$
 			callback : function(data) {
 				// check if we know the remote name
-				if(data.parameters && data.parameters.valueFor("remoteName")){
-					data.remoteName = data.parameters.valueFor("remoteName");
+				if(data.parameters && data.parameters.valueFor("remoteName")){ //$NON-NLS-0$
+					data.remoteName = data.parameters.valueFor("remoteName"); //$NON-NLS-0$
 				}
 			
 				var commandInvocation = data;
@@ -1695,14 +1633,14 @@ var exports = {};
 							function(isEnabled){
 								if(isEnabled){
 									if (jsonData.JsonData.User)
-										commandInvocation.parameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter("sshpassword", "password", messages['Password:']), new mCommandRegistry.CommandParameter("saveCredentials", "boolean", messages["Don't prompt me again:"])], {hasOptionalParameters: true}); //$NON-NLS-1$ //$NON-NLS-0$
+										commandInvocation.parameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter("sshpassword", "password", messages['Password:']), new mCommandRegistry.CommandParameter("saveCredentials", "boolean", messages["Don't prompt me again:"])], {hasOptionalParameters: true}); //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 									else
-										commandInvocation.parameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter("sshuser", "text", messages['User Name:']), new mCommandRegistry.CommandParameter("sshpassword", "password", messages['Password:']), new mCommandRegistry.CommandParameter("saveCredentials", "boolean", messages["Don't prompt me again:"])], {hasOptionalParameters: true}); //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-1$ //$NON-NLS-0$
+										commandInvocation.parameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter("sshuser", "text", messages['User Name:']), new mCommandRegistry.CommandParameter("sshpassword", "password", messages['Password:']), new mCommandRegistry.CommandParameter("saveCredentials", "boolean", messages["Don't prompt me again:"])], {hasOptionalParameters: true}); //$NON-NLS-5$ //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 								} else {
 									if (jsonData.JsonData.User)
 										commandInvocation.parameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter("sshpassword", "password", messages['Password:'])], {hasOptionalParameters: true}); //$NON-NLS-1$ //$NON-NLS-0$
 									else
-										commandInvocation.parameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter("sshuser", "text", messages['User Name:']), new mCommandRegistry.CommandParameter("sshpassword", "password", messages['Password:'])], {hasOptionalParameters: true}); //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-1$ //$NON-NLS-0$
+										commandInvocation.parameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter("sshuser", "text", messages['User Name:']), new mCommandRegistry.CommandParameter("sshpassword", "password", messages['Password:'])], {hasOptionalParameters: true}); //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 								}
 								
 								commandInvocation.errorData = jsonData.JsonData;
@@ -1723,10 +1661,11 @@ var exports = {};
 				}
 				var createRemoteFunction = function(remoteLocation, name, selectedRepository) {		
 					var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
-					progress.progress(serviceRegistry.getService("orion.git.provider").addRemote(remoteLocation, name, data.userData), "Adding git remote " + name).then(function() { //$NON-NLS-0$
+					var msg = i18nUtil.formatMessage(messages["Adding remote ${0}..."], name);
+					progress.progress(serviceRegistry.getService("orion.git.provider").addRemote(remoteLocation, name, data.userData), msg).then(function() { //$NON-NLS-0$
 						exports.gatherSshCredentials(serviceRegistry, data).then(
 							function(options) {
-								serviceRegistry.getService("orion.git.provider").getGitRemote(selectedRepository.RemoteLocation).then(
+								serviceRegistry.getService("orion.git.provider").getGitRemote(selectedRepository.RemoteLocation).then( //$NON-NLS-0$
 								function(remotes){
 									var remoteToFetch;
 									for(var i=0;i<remotes.Children.length;i++){
@@ -1742,14 +1681,15 @@ var exports = {};
 										options.gitSshPassword,
 										options.knownHosts,
 										options.gitPrivateKey,
-										options.gitPassphrase), "Fetching remote " + name);
+										options.gitPassphrase), messages["Fetching remote: "] + name);
 									statusService.createProgressMonitor(deferred, messages["Fetching remote: "] + remoteToFetch.Location);
 									deferred.then(
-												function(jsonData, secondArg) {
+												function(jsonData) {
 												exports.handleGitServiceResponse(jsonData, serviceRegistry, 
 													function() {
-														progress.progress(gitService.getGitRemote(remoteToFetch.Location), "Getting remote details " + name).then(
-															function(jsonData){
+														msg = i18nUtil.formatMessage(messages["Getting remote details"], name);
+														progress.progress(gitService.getGitRemote(remoteToFetch.Location), msg).then(
+															function(){
 																explorer.changedItem(item);
 															}, displayErrorOnStatus
 														);
@@ -1757,7 +1697,7 @@ var exports = {};
 														handleResponse(jsonData, data);
 													}
 												);
-											},function(jsonData, secondArg) {
+											},function(jsonData) {
 												exports.handleGitServiceResponse(jsonData, serviceRegistry, 
 													function() {
 														explorer.changedItem(item);
@@ -1779,14 +1719,14 @@ var exports = {};
 										commandInvocation.items);
 				} else {
 					commandInvocation.parameters = new mCommandRegistry.ParametersDescription([
-						new mCommandRegistry.CommandParameter("remoteName", "text", messages["Remote Name:"])
+						new mCommandRegistry.CommandParameter("remoteName", "text", messages["Remote Name:"]) //$NON-NLS-1$ //$NON-NLS-0$
 					], {hasOptionalParameters : false});
 					
 					commandService.collectParameters(commandInvocation);
 				}
 
 			},
-			visibleWhen : function(item) {
+			visibleWhen : function() {
 				return true;
 			}
 		});
@@ -1812,13 +1752,12 @@ var exports = {};
 						var gitConfigPreference = new GitConfigPreference(serviceRegistry);
 						gitConfigPreference.getConfig().then(function(userInfo){
 							var deferred = progress.progress(gitService.cloneGitRepository(name, gitUrl, path, explorer.defaultPath, null, null, null, null, null, userInfo), messages["Initializing repository: "] + name); //$NON-NLS-0$
-							serviceRegistry.getService("orion.page.message").createProgressMonitor(deferred,
-									messages["Initializing repository: "] + name);
-							deferred.then(function(jsonData, secondArg){
-								exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function(jsonData){
-									refresh(data);
+							serviceRegistry.getService("orion.page.message").createProgressMonitor(deferred, messages["Initializing repository: "] + name); //$NON-NLS-0$
+							deferred.then(function(jsonData){
+								exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function(){
+									dispatchModelEventOn({type: "modelChanged", action: "addClone", name: name, gitUrl: gitUrl}); //$NON-NLS-1$ //$NON-NLS-0$
 								}, func, messages["Init Git Repository"]);
-							}, function(jsonData, secondArg) {
+							}, function(jsonData) {
 								exports.handleProgressServiceResponse(jsonData, options, serviceRegistry, function() {}, func, messages['Init Git Repository']);
 							});
 						});
@@ -1839,7 +1778,7 @@ var exports = {};
 					dialog.show();
 				}
 			},
-			visibleWhen : function(item) {
+			visibleWhen : function() {
 				return true;
 			}
 		});
@@ -1851,7 +1790,7 @@ var exports = {};
 			imageClass: "core-sprite-trashcan", //$NON-NLS-0$
 			id: "eclipse.git.deleteClone", //$NON-NLS-0$
 			visibleWhen: function(item) {
-				return item.Type === "Clone";
+				return item.Type === "Clone"; //$NON-NLS-0$
 			},
 			callback: function(data) {
 				var item = data.items;
@@ -1861,20 +1800,22 @@ var exports = {};
 					if(confirm(i18nUtil.formatMessage(messages["Are you sure you want do delete ${0} repositories?"], item.length))){
 						var alreadyDeleted = 0;
 						for(var i=0; i<item.length; i++){
-							progress.progress(gitService.removeGitRepository(item[i].Location), "Removing repository " + item.Name).then(
-									function(jsonData){
+							var msg = i18nUtil.formatMessage(messages["Removing repository ${0}"], item.Name);
+							progress.progress(gitService.removeGitRepository(item[i].Location), msg).then(
+									function(){
 										alreadyDeleted++;
 										if(alreadyDeleted >= item.length){
-											dispatchModelEventOn({type: "modelChanged", action: "deleteClone", items: item}); //$NON-NLS-1$ //$NON-NLS-0$
+											dispatchModelEventOn({type: "modelChanged", action: "removeClone", items: item}); //$NON-NLS-1$ //$NON-NLS-0$
 										}
 									}, displayErrorOnStatus);
 						}
 					}
 				} else {
 					if(confirm(i18nUtil.formatMessage(messages['Are you sure you want to delete ${0}?'], item.Name)))
-						progress.progress(gitService.removeGitRepository(item.Location), "Removing repository " + item.Name).then(
-							function(jsonData){
-								dispatchModelEventOn({type: "modelChanged", action: "deleteClone", items: [item]}); //$NON-NLS-1$ //$NON-NLS-0$
+						var msg1 = i18nUtil.formatMessage(messages["Removing repository ${0}"], item.Name);
+						progress.progress(gitService.removeGitRepository(item.Location), msg1).then(
+							function(){
+								dispatchModelEventOn({type: "modelChanged", action: "removeClone", items: [item]}); //$NON-NLS-1$ //$NON-NLS-0$
 							},
 							displayErrorOnStatus);
 				}
@@ -1903,42 +1844,25 @@ var exports = {};
 					var message;
 					try{
 						var jsonResult = JSON.parse(result);
-						if(jsonResult.JsonData && jsonResult.JsonData.modifiedFieles){
-							message = "Patch applied, files modified: ";
-							var isFirst = true;
-							for(var i=0; i<jsonResult.JsonData.modifiedFieles.length; i++){
-								if(!isFirst){
-									message+=", ";
-								}
-								message+=jsonResult.JsonData.modifiedFieles[i];
-								isFirst = false;
-							}
-							
-							var display = [];
+						if(jsonResult.JsonData){
+							var display = {};
 							display.Severity = "Info"; //$NON-NLS-0$
 							display.HTML = false;
-							display.Message = message;
+							display.Message = messages["PatchApplied"];
 							messageService.setProgressResult(display); //$NON-NLS-0$
+							dispatchModelEventOn({type: "modelChanged", action: "applyPatch"});  //$NON-NLS-1$  //$NON-NLS-0$
 							return;
 						}
 					} catch (e){
 					}
-					message = "Patch applied";
+					message = messages["PatchApplied"];
 					messageService.setMessage(message);
 				}, function(error){
 					var jsonError = JSON.parse(error);
-					var message = "Apply patch failed.";
-					if(jsonError.DetailedMessage){
-						message += " "; 
-						message += jsonError.DetailedMessage;
-					} else if(jsonError.Message){
-						message += " "; 
-						message += jsonError.Message;
-					}
-					var display = [];
+					var display = {};
 					display.Severity = "Error"; //$NON-NLS-0$
 					display.HTML = false;
-					display.Message = message;
+					display.Message = i18nUtil.formatMessage(messages["PatchFailed"], jsonError.DetailedMessage || jsonError.Message || "");
 					messageService.setProgressResult(display); //$NON-NLS-0$
 				});
 			},
@@ -1949,16 +1873,7 @@ var exports = {};
 		commandService.addCommand(applyPatchCommand);
 	};
 
-	exports.createGitStatusCommands = function(serviceRegistry, commandService, explorer) {
-		
-		var refresh = function(data, items) { 
-			if (data && data.handler.changedItem) {
-				data.handler.changedItem(items);
-			} else { 
-				explorer.changedItem(items); 
-			}
-		};
-		
+	exports.createGitStatusCommands = function(serviceRegistry, commandService) {
 		var commitOptions = {
 			serviceRegistry : serviceRegistry,
 			commandService : commandService,
@@ -1987,15 +1902,15 @@ var exports = {};
 				var progressService = serviceRegistry.getService("orion.page.message"); //$NON-NLS-0$
 				var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 				
+				var deferred;
 				if (items.length === 1){
-					var deferred = progress.progress(serviceRegistry.getService("orion.git.provider").stage(items[0].indexURI), messages["Staging changes"]); //$NON-NLS-0$ 
+					deferred = progress.progress(serviceRegistry.getService("orion.git.provider").stage(items[0].indexURI), messages["Staging changes"]); //$NON-NLS-0$ 
 					progressService.createProgressMonitor(
 						deferred,
 						messages["Staging changes"]);
 					deferred.then(
-						function(jsonData){
-							refresh(data, items);
-							dispatchModelEventOn({type: "modelChanged", action: "stage"});
+						function(){
+							dispatchModelEventOn({type: "modelChanged", action: "stage", items: items}); //$NON-NLS-1$ //$NON-NLS-0$
 						}, displayErrorOnStatus
 					);
 				} else {
@@ -2004,14 +1919,13 @@ var exports = {};
 						paths[i] = items[i].name;
 					}
 					
-					var deferred = progress.progress(serviceRegistry.getService("orion.git.provider").stageMultipleFiles(data.userData.Clone.IndexLocation, paths),  messages["Staging changes"]);
+					deferred = progress.progress(serviceRegistry.getService("orion.git.provider").stageMultipleFiles(data.userData.Clone.IndexLocation, paths),  messages["Staging changes"]); //$NON-NLS-0$
 					progressService.createProgressMonitor(
 						deferred, //$NON-NLS-0$
-						"Staging changes");
+						messages["Staging changes"]);
 					deferred.then( //$NON-NLS-0$
-						function(jsonData){
-							refresh(data, items);
-							dispatchModelEventOn({type: "modelChanged", action: "stage"});
+						function(){
+							dispatchModelEventOn({type: "modelChanged", action: "stage", items: items}); //$NON-NLS-1$ //$NON-NLS-0$
 						}, displayErrorOnStatus
 					);
 				}			
@@ -2038,7 +1952,7 @@ var exports = {};
 			var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 			var deferred;
 			if (items.length === 1){				
-				deferred = progress.progress(serviceRegistry.getService("orion.git.provider").unstage(items[0].indexURI, items[0].name), 'Unstaging changes');
+				deferred = progress.progress(serviceRegistry.getService("orion.git.provider").unstage(items[0].indexURI, items[0].name), messages['Unstaging changes']); //$NON-NLS-0$
 				progressService.createProgressMonitor(
 					deferred, //$NON-NLS-0$
 					messages['Staging changes']);
@@ -2048,7 +1962,7 @@ var exports = {};
 					paths[i] = items[i].name;
 				}
 				
-				deferred = progress.progress(serviceRegistry.getService("orion.git.provider").unstage(data.userData.Clone.IndexLocation, paths), 'Unstaging changes'); //$NON-NLS-0$
+				deferred = progress.progress(serviceRegistry.getService("orion.git.provider").unstage(data.userData.Clone.IndexLocation, paths), messages['Unstaging changes']); //$NON-NLS-0$
 				progressService.createProgressMonitor(
 					deferred,
 					messages['Staging changes']);
@@ -2065,8 +1979,7 @@ var exports = {};
 			callback: function(data) {
 				doUnstage(data).then(
 					function(items){
-						refresh(data, items);
-						dispatchModelEventOn({type: "modelChanged", action: "unstage"});
+						dispatchModelEventOn({type: "modelChanged", action: "unstage", items: items}); //$NON-NLS-1$ //$NON-NLS-0$
 					}, displayErrorOnStatus
 				);
 			},
@@ -2091,10 +2004,10 @@ var exports = {};
 			id: "eclipse.orion.git.commitCommand", //$NON-NLS-0$
 			callback: function(data) {
 				commitCallback(data).then(function() {
-					refresh();
+					dispatchModelEventOn({type: "modelChanged", action: "commit"}); //$NON-NLS-1$ //$NON-NLS-0$
 				});
 			},
-			visibleWhen: function(item) {
+			visibleWhen: function() {
 				return true;
 			}
 		});	
@@ -2110,8 +2023,7 @@ var exports = {};
 				var item = data.items;
 				
 				var dialog = serviceRegistry.getService("orion.page.dialog"); //$NON-NLS-0$
-				dialog.confirm(messages['All unstaged and staged changes in the working directory and index will be discarded and cannot be recovered.']+"\n" + //$NON-NLS-1$
-					messages['Are you sure you want to continue?'],
+				dialog.confirm(messages['ResetConfirm'],
 					function(doit) {
 						if (!doit) {
 							return;
@@ -2123,8 +2035,8 @@ var exports = {};
 							deferred,
 							messages["Resetting local changes"]);
 						deferred.then(
-							function(jsonData){
-								explorer.changedItem(item);
+							function(){
+								dispatchModelEventOn({type: "modelChanged", action: "reset", mode: "HARD"}); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 							}, displayErrorOnStatus
 						);		
 					}
@@ -2132,10 +2044,10 @@ var exports = {};
 			},
 			
 			visibleWhen: function(item) {
-				if (item.Type !== "Status") {
+				if (item.Type !== "Status") { //$NON-NLS-0$
 					return false;
 				}
-				return mGitUtil.hasStagedChanges(item) || mGitUtil.hasUnstagedChanges(item);;
+				return mGitUtil.hasStagedChanges(item) || mGitUtil.hasUnstagedChanges(item);
 			}
 		});
 
@@ -2150,8 +2062,7 @@ var exports = {};
 				var items = forceArray(data.items);
 				
 				var dialog = serviceRegistry.getService("orion.page.dialog"); //$NON-NLS-0$
-				dialog.confirm(messages["Your changes to the selected files will be discarded and cannot be recovered."] + "\n" + //$NON-NLS-1$
-					messages['Are you sure you want to continue?'],
+				dialog.confirm(messages["CheckoutConfirm"],
 					function(doit) {
 						if (!doit) {
 							return;
@@ -2170,8 +2081,8 @@ var exports = {};
 							deferred,
 							messages['Resetting local changes']);
 						deferred.then(
-							function(jsonData){
-								explorer.changedItem(items);
+							function(){
+								dispatchModelEventOn({type: "modelChanged", action: "checkoutFile", items: items}); //$NON-NLS-1$ //$NON-NLS-0$
 							}, displayErrorOnStatus
 						);				
 					}
@@ -2199,8 +2110,7 @@ var exports = {};
 			id: "eclipse.orion.git.checkoutStagedCommand", //$NON-NLS-0$
 			callback: function(data) {				
 				var dialog = serviceRegistry.getService("orion.page.dialog"); //$NON-NLS-0$
-				dialog.confirm(messages["Your changes to the selected files will be discarded and cannot be recovered."] + "\n" + //$NON-NLS-1$
-					messages['Are you sure you want to continue?'],
+				dialog.confirm(messages["CheckoutConfirm"],
 					function(doit) {
 						if (!doit) {
 							return;
@@ -2220,15 +2130,15 @@ var exports = {};
 								deferred,
 								messages['Resetting local changes']);
 							return deferred.then(
-								function(jsonData){
-									explorer.changedItem(items);
+								function(){
+									dispatchModelEventOn({type: "modelChanged", action: "checkoutFile", items: items}); //$NON-NLS-1$ //$NON-NLS-0$
 								}, displayErrorOnStatus
 							);
 						});				
 					}
 				);
 			},
-			visibleWhen: function(item) {
+			visibleWhen: function() {
 				return true;
 			}
 		});
@@ -2258,21 +2168,21 @@ var exports = {};
 					messages["Writing .gitignore rules"]);
 				
 				return deferred.then(
-					function(jsonData){
+					function(){
 						
 						deferred = progress.progress(serviceRegistry.getService("orion.git.provider").unstage(data.userData.Clone.IndexLocation, paths), messages['Resetting local changes']); //$NON-NLS-0$ //$NON-NLS-1$
 						progressService.createProgressMonitor(
 							deferred,
 							messages['Resetting local changes']);
 						
-						return deferred.then(function(jsonData){
-							refresh(data, items);
+						return deferred.then(function(){
+							dispatchModelEventOn({type: "modelChanged", action: "ignoreFile", items: items}); //$NON-NLS-1$ //$NON-NLS-0$
 						}, displayErrorOnStatus);
 						
 					}, displayErrorOnStatus
 				);
 			},
-			visibleWhen: function(item) {
+			visibleWhen: function() {
 				return true;
 			}
 		});
@@ -2312,10 +2222,10 @@ var exports = {};
 		
 		var showPatchCallback = function(data) {
 			var items = forceArray(data.items);
-			var url;
+			var url, i;
 			if (data.userData && data.userData.Clone && data.userData.Clone.DiffLocation) {
-				url = data.userData.Clone.DiffLocation.replace("\/Default\/", "\/Cached\/") + "?parts=diff"; //$NON-NLS-0$
-				for (var i = 0; i < items.length; i++) {
+				url = data.userData.Clone.DiffLocation.replace("\/Default\/", "\/Cached\/") + "?parts=diff"; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+				for (i = 0; i < items.length; i++) {
 					url += "&Path="; //$NON-NLS-0$
 					url += items[i].name;
 				}
@@ -2324,7 +2234,7 @@ var exports = {};
 				var newPath = data.items.Diffs[0].NewPath;
 				url = baseLocation.substring(0, baseLocation.length - newPath.length);
 				url += "?parts=diff";  //$NON-NLS-0$
-				for (var i = 0; i < data.items.Diffs.length; i++) {
+				for (i = 0; i < data.items.Diffs.length; i++) {
 					url += "&Path="; //$NON-NLS-0$
 					url += data.items.Diffs[i].NewPath;
 				}
@@ -2339,7 +2249,7 @@ var exports = {};
 			tooltip: messages["Show checked changes as a patch"],
 			id: "eclipse.orion.git.showStagedPatchCommand", //$NON-NLS-0$
 			callback: showPatchCallback,
-			visibleWhen: function(item) {
+			visibleWhen: function() {
 				return true;
 			}
 		});
@@ -2352,7 +2262,7 @@ var exports = {};
 			tooltip: messages["ShowCommitPatchTip"],
 			id: "eclipse.orion.git.showCommitPatchCommand", //$NON-NLS-0$
 			callback: showPatchCallback,
-			visibleWhen: function(item) {
+			visibleWhen: function() {
 				return true;
 			}
 		});
@@ -2364,38 +2274,30 @@ var exports = {};
 			var progressService = serviceRegistry.getService("orion.page.message"); //$NON-NLS-0$
 			var progress = serviceRegistry.getService("orion.page.progress"); //$NON-NLS-0$
 			
-			var deferred = progress.progress(serviceRegistry.getService("orion.git.provider").doRebase(HeadLocation, "", action), "Rebasing git repository"); //$NON-NLS-0$ 
+			var deferred = progress.progress(serviceRegistry.getService("orion.git.provider").doRebase(HeadLocation, "", action), messages["RebasingRepo"]); //$NON-NLS-1$ //$NON-NLS-0$ 
 			progressService.createProgressMonitor(
 				deferred,
 				action);
 			deferred.then(
 				function(jsonData){
+					var display = {};
 					if (jsonData.Result === "OK" || jsonData.Result === "ABORTED" || jsonData.Result === "FAST_FORWARD" || jsonData.Result === "UP_TO_DATE") { //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
-						var display = [];
 						display.Severity = "Ok"; //$NON-NLS-0$
 						display.HTML = false;
 						display.Message = jsonData.Result;
-						
 						serviceRegistry.getService("orion.page.message").setProgressResult(display); //$NON-NLS-0$
-						explorer.changedItem({});
-					}
-					
-					if (jsonData.Result === "STOPPED") { //$NON-NLS-0$
-						var display = [];
+					} else if (jsonData.Result === "STOPPED") { //$NON-NLS-0$
 						display.Severity = "Warning"; //$NON-NLS-0$
 						display.HTML = false;
 						display.Message = jsonData.Result + messages['. Repository still contains conflicts.'];
-						
 						serviceRegistry.getService("orion.page.message").setProgressResult(display); //$NON-NLS-0$
-						explorer.changedItem({});
 					} else if (jsonData.Result === "FAILED_UNMERGED_PATHS") { //$NON-NLS-0$
-						var display = [];
 						display.Severity = "Error"; //$NON-NLS-0$
 						display.HTML = false;
 						display.Message = jsonData.Result + messages['. Repository contains unmerged paths. Resolve conflicts first.'];
-						
 						serviceRegistry.getService("orion.page.message").setProgressResult(display); //$NON-NLS-0$
 					}
+					dispatchModelEventOn({type: "modelChanged", action: "rebase", rebaseAction: action, result: jsonData.Result, failed: display.Severity !== "Ok"}); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 					
 				}, displayErrorOnStatus
 			);
@@ -2450,7 +2352,7 @@ var exports = {};
 		commandService.addCommand(rebaseAbortCommand);	
 	};
 	
-	exports.createSharedCommands = function(serviceRegistry, commandService, explorer, toolbarId, selectionTools, fileClient) {
+	exports.createSharedCommands = function(serviceRegistry, commandService, explorer, toolbarId) {
 		
 		//used both as confirm and remotePrompter dialogs callback
 		var refresh = function(data) { 
@@ -2488,10 +2390,10 @@ var exports = {};
 		var commitAndPushCommand = new mCommands.Command({
 			name: messages["CommitPush"],
 			tooltip: messages["Commits and pushes files to the default remote"],
-			id: "eclipse.orion.git.commitAndPushCommand",
+			id: "eclipse.orion.git.commitAndPushCommand", //$NON-NLS-0$
 			callback: function(data) {
 				commitCallback(data).then(function() {
-					serviceRegistry.getService("orion.git.provider").getGitBranch(data.items.Clone.BranchLocation).then(
+					serviceRegistry.getService("orion.git.provider").getGitBranch(data.items.Clone.BranchLocation).then( //$NON-NLS-0$
 							function(resp) { 
 								var branches = resp.Children;
 								var currentBranch;
@@ -2507,7 +2409,7 @@ var exports = {};
 								data.parameters = undefined;
 								
 								data.items.LocalBranch = currentBranch;
-								data.items.RemoteBranch = currentBranch.RemoteLocation[0].Children[0];
+								data.items.Remote = currentBranch.RemoteLocation[0].Children[0];
 								
 								pushCallback(data).then(function() {
 									refresh();
@@ -2522,7 +2424,7 @@ var exports = {};
 					displayErrorOnStatus(err);
 				});
 			},
-			visibleWhen: function(item) {
+			visibleWhen: function() {
 				return true;
 			}
 		});
@@ -2533,15 +2435,15 @@ var exports = {};
 			imageClass: "git-sprite-stash-changes", //$NON-NLS-0$
 			spriteClass: "gitCommandSprite", //$NON-NLS-0$
 			tooltip : messages["Stash all current changes away"],
-			id : "eclipse.orion.git.createStash",
+			id : "eclipse.orion.git.createStash", //$NON-NLS-0$
 			callback : function(data){
-				stashLogic.stashAll(data).then(function(resp){
-					refresh();
+				stashLogic.stashAll(data).then(function(){
+					dispatchModelEventOn({type: "modelChanged", action: "stash"}); //$NON-NLS-1$ //$NON-NLS-0$
 				}, function(error){
 					displayErrorOnStatus(error);
 				});
 			},
-			visibleWhen : function(item){
+			visibleWhen : function(){
 				return true;
 			}
 		});
@@ -2551,16 +2453,16 @@ var exports = {};
 			name : messages["Drop"],
 			imageClass: "core-sprite-trashcan", //$NON-NLS-0$
 			tooltip : messages["Drop the commit from the stash list"],
-			id : "eclipse.orion.git.dropStash",
+			id : "eclipse.orion.git.dropStash", //$NON-NLS-0$
 			callback : function(data){
-				stashLogic.drop(data).then(function(resp){
-					refresh(data);
+				stashLogic.drop(data).then(function(){
+					dispatchModelEventOn({type: "modelChanged", action: "dropStash"}); //$NON-NLS-1$ //$NON-NLS-0$
 				}, function(error){
 					displayErrorOnStatus(error);
 				});
 			},
 			visibleWhen : function(item){
-				return item.Type === "StashCommit";
+				return item.Type === "StashCommit"; //$NON-NLS-0$
 			}
 		});
 		commandService.addCommand(dropStashCommand);
@@ -2568,16 +2470,16 @@ var exports = {};
 		var applyStashCommand = new mCommands.Command({
 			name : messages["Apply"],
 			tooltip : messages["Apply the change introduced by the commit to your active branch"],
-			id : "eclipse.orion.git.applyStash",
+			id : "eclipse.orion.git.applyStash", //$NON-NLS-0$
 			callback : function(data){
-				stashLogic.apply(data).then(function(resp){
-					refresh();
+				stashLogic.apply(data).then(function(){
+					dispatchModelEventOn({type: "modelChanged", action: "applyStash"}); //$NON-NLS-1$ //$NON-NLS-0$
 				}, function(error){
 					displayErrorOnStatus(error);
 				});
 			},
 			visibleWhen : function(item){
-				return item.Type === "StashCommit";
+				return item.Type === "StashCommit"; //$NON-NLS-0$
 			}
 		});
 		commandService.addCommand(applyStashCommand);
@@ -2587,16 +2489,16 @@ var exports = {};
 			imageClass: "git-sprite-pop-changes", //$NON-NLS-0$
 			spriteClass: "gitCommandSprite", //$NON-NLS-0$
 			tooltip : messages["Apply the most recently stashed change to your active branch and drop it from the stashes"],
-			id : "eclipse.orion.git.popStash",
+			id : "eclipse.orion.git.popStash", //$NON-NLS-0$
 			callback : function(data){
-				stashLogic.pop(data).then(function(resp){
-					refresh();
+				stashLogic.pop(data).then(function(){
+					dispatchModelEventOn({type: "modelChanged", action: "popStash"}); //$NON-NLS-1$ //$NON-NLS-0$
 				}, function(error){
 					displayErrorOnStatus(error);
 				});
 			},
 			visibleWhen : function(item){
-				return item.Type === "Clone";
+				return item.Type === "Clone"; //$NON-NLS-0$
 			}
 		});
 		commandService.addCommand(popStashCommand);

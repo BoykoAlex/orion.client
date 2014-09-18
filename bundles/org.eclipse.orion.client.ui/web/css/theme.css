@@ -128,6 +128,7 @@ a:hover {
 .breadcrumb {
 	color: #333;
 	flex-grow: 0;
+	-webkit-flex-grow: 0;		/* Safari */
 	font-size: 8pt;
 	overflow: hidden;
 	padding-top: 2px;
@@ -149,6 +150,7 @@ a.breadcrumb:hover {
 .breadcrumbSeparator {
 	color: #333;
 	flex-shrink: 0;
+	-webkit-flex-shrink: 0;		/* Safari */
 	font-size: 8pt;
 	font-weight: bold;
 	margin: 2px;
@@ -295,10 +297,11 @@ a.breadcrumb.currentLocation {
 	text-align: center;
 	vertical-align: baseline;
     display: inline-block;
-    padding: 2px 6px 3px;
+    padding: 4px 6px;
     border-radius: 1px;
     line-height: 12px;
-	font: 8pt Lucida Sans Unicode,Lucida Grande,Verdana,Arial,Helvetica,Myriad,Tahoma,clean,sans-serif;  /* to override user agent stylesheet */
+    font-size: 9pt;
+	font-family: Lucida Grande,Tahoma,sans-serif; /* to override user agent stylesheet */
 	margin: 0;  /* to override user agent stylesheet */
 }
 
@@ -339,9 +342,8 @@ a.breadcrumb.currentLocation {
 	vertical-align: baseline;
 	cursor: pointer;
 	display: inline-block;
-	padding: 1px;
-	padding-top:0;
-	padding-bottom: 3px;
+	padding: 2px;
+	padding-top: 0;
 	-webkit-touch-callout: none;
 	-webkit-user-select: none;
 	-khtml-user-select: none;
@@ -355,29 +357,86 @@ a.breadcrumb.currentLocation {
 	border: 1px solid #ccc;
 }
 
+/* push toggle */
+
+.orionToggleOff {
+	color: #222;
+	border-radius: 3px;
+	vertical-align:middle;
+	-webkit-animation-duration: .3s; 
+	animation-duration: .3s; 
+	-webkit-animation-fill-mode: both; 
+	animation-fill-mode: both; 
+	-webkit-animation-timing-function: linear; 
+	animation-timing-function: linear;
+}
+
+.orionToggleOn {
+	color: #222;
+	background-color: whitesmoke;
+	border-radius: 3px;
+	box-shadow: inset 1px 1px 2px 1px rgba(0,0,0,0.3);
+	vertical-align:middle;
+	-webkit-animation-duration: .3s; 
+	animation-duration: .3s; 
+	-webkit-animation-fill-mode: both; 
+	animation-fill-mode: both; 
+	-webkit-animation-timing-function: linear; 
+	animation-timing-function: linear; 
+}
+
+.orionToggleOn:hover {
+	background: white;
+	box-shadow: inset 0 0 1px 1px rgba(0,0,0,0.2);
+}
+
+.orionToggleOff:hover {
+	background: whitesmoke;
+	box-shadow: inset 0 0 1px 1px rgba(0,0,0,0.2);
+}
+
+.orionToggleAnimate {
+	-webkit-animation-name: pulse; 
+	animation-name: pulse; 
+}
+
+
+@-webkit-keyframes pulse { 
+    0% { -webkit-transform: scale(1); } 
+    50% { -webkit-transform: scale(1.3); } 
+    100% { -webkit-transform: scale(1); } 
+} 
+@keyframes pulse { 
+    0% { transform: scale(1); } 
+    50% { transform: scale(1.3); } 
+    100% { transform: scale(1); } 
+} 
+
 /* toggle */
 
-.orionToggle {
+.orionSwitch {
 	position: relative;
 	width: auto;
 }
 
-.orionToggleCheck {
+.orionSwitchCheck {
  	display: none;
 }
 
-.orionToggleLabel {
+.orionSwitchLabel {
 	display: block; 
 	overflow: hidden; 
 	cursor: pointer;
-	border: 1px solid #aaa; 
-	border-radius: 6px;
+	border: 1px solid #CCC; 
+	border-radius: 3px;
+	height:20px;
 }
 
-.orionToggleInner {
+.orionSwitchInner {
 	display: block; 
 	width: 200%; 
 	margin-left: -100%;
+	margin-top:-1px;
 	text-align: left;
 	-moz-transition: margin 0.3s ease-in 0s; 
 	-webkit-transition: margin 0.3s ease-in 0s;
@@ -385,7 +444,7 @@ a.breadcrumb.currentLocation {
 	transition: margin 0.3s ease-in 0s;
 }
 
-.orionToggleInner:before, .orionToggleInner:after {
+.orionSwitchInner:before, .orionSwitchInner:after {
 	display: block; 
 	float: left; 
 	width: 50%; 
@@ -396,24 +455,25 @@ a.breadcrumb.currentLocation {
 	box-sizing: border-box;
 }
 
-.orionToggleInner:before {
-	padding-left: 2px;
+.orionSwitchInner:before {
+	padding-left: 3px;
+	padding-right:2px;
 	background-color: #eee;
 }
 
-.orionToggleInner:after {
-	padding-right: 2px;
+.orionSwitchInner:after {
+	padding-right: 3px;
 	background-color: #eee;
 	text-align: right;
 }
 
-.orionToggleSwitch {
+.orionSwitchSwitch {
 	display: block; 
 	width: calc(50% - 2px); 
 	margin: 0;
 	background: #ddd;
-	border: 1px solid #aaa; 
-	border-radius: 6px;
+	border: 1px solid #CDCDCD; 
+	border-radius: 3px;
 	position: absolute; 
 	top: 0; 
 	bottom: 0; 
@@ -424,11 +484,11 @@ a.breadcrumb.currentLocation {
 	transition: all 0.3s ease-in 0s; 
 }
 
-.orionToggleCheck:checked + .orionToggleLabel .orionToggleInner {
+.orionSwitchCheck:checked + .orionSwitchLabel .orionSwitchInner {
 	margin-left: 0;
 }
 
-.orionToggleCheck:checked + .orionToggleLabel .orionToggleSwitch {
+.orionSwitchCheck:checked + .orionSwitchLabel .orionSwitchSwitch {
 	right: 0px; 
 }
 

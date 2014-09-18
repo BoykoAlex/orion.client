@@ -29,7 +29,7 @@ define([
 		filterDiv.appendChild(filter);
 		var button = document.createElement("button"); //$NON-NLS-0$
 		button.tabIndex = -1;
-		button.className = "core-sprite-search searchButton"; //$NON-NLS-0$
+		button.className = "core-sprite-filter searchButton"; //$NON-NLS-0$
 		filterDiv.appendChild(button);
 		var doFilter = function() {
 			callback(filter.value);
@@ -59,13 +59,22 @@ define([
 	 * @param {Boolean} editableInComparePage The flag to indicate if opening compage will be editable on the left side. Default is false. Optional.
 	 * @param {Object} gridRenderer If all the commands have to be rendered as grids, especially inside a row of Orion explorer, this has to be provided. Optional.
 	 * @param {String} compareTo Optional. If the resource parameter is a simple file URL then this can be used as the second file URI to compare with.
+	 * @param {String} toggleCommandSpanId Optional. The id of the DIV where the "toggle" command will be rendered. If this parameter is defined, the "toggle" command will ONLY be rendered in this DIV.
 	 */
-	function createCompareWidget(serviceRegistry, commandService, resource, hasConflicts, parentDivId, commandSpanId, editableInComparePage, gridRenderer, compareTo) {
+	function createCompareWidget(serviceRegistry, commandService, resource, hasConflicts, parentDivId, commandSpanId, editableInComparePage, gridRenderer, compareTo, toggleCommandSpanId) {
 		var diffProvider = new mResourceComparer.DefaultDiffProvider(serviceRegistry);
-		var cmdProvider = new mCompareCommands.CompareCommandFactory({commandService: commandService, commandSpanId: commandSpanId, gridRenderer: gridRenderer});
+		var cmdProvider = new mCompareCommands.CompareCommandFactory({commandService: commandService, commandSpanId: commandSpanId, toggleCommandSpanId: toggleCommandSpanId, gridRenderer: gridRenderer});
+		cmdProvider.addEventListener("compareConfigChanged", function(e) { //$NON-NLS-0$
+			if(e.name === "mode") {
+				//TODO: use e.value as the compareOptions.type, e.g. "inline" or "twoWay"
+			} else if(e.name === "ignoreWhiteSpace") {
+				//TODO: use e.value as the compareOptions.type, e.g. "inline" or "twoWay"
+			}
+		}.bind(this));
 		var comparerOptions = {
 			toggleable: true,
-			type: "inline", //$NON-NLS-0$
+			type: "inline", //$NON-NLS-0$ //From user preference
+			ignoreWhitespace: false,//From user reference
 			readonly: true,
 			hasConflicts: hasConflicts,
 			diffProvider: diffProvider,

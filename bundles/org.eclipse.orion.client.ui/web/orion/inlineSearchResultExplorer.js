@@ -15,11 +15,11 @@
 define(['i18n!orion/search/nls/messages', 'require', 'orion/Deferred', 'orion/webui/littlelib', 'orion/contentTypes', 'orion/i18nUtil', 'orion/explorers/explorer', 
 	'orion/fileClient', 'orion/commands', 'orion/searchUtils', 'orion/compare/compareView', 
 	'orion/highlight', 'orion/explorers/navigationUtils', 'orion/webui/tooltip', 'orion/explorers/navigatorRenderer', 'orion/extensionCommands',
-	'orion/searchModel', 'orion/crawler/searchCrawler', 'orion/selection'
+	'orion/searchModel', 'orion/crawler/searchCrawler'
 ],
 function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, mFileClient, mCommands, 
 	mSearchUtils, mCompareView, mHighlight, mNavUtils, mTooltip, 
-	navigatorRenderer, extensionCommands, mSearchModel, mSearchCrawler, mSelection
+	navigatorRenderer, extensionCommands, mSearchModel, mSearchCrawler
 ) {
     /* Internal wrapper functions*/
     function _empty(nodeToEmpty) {
@@ -161,15 +161,22 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
         }, 10);
     };
 
-    SearchResultRenderer.prototype.staleFileElement = function(item, displayName) {
+    SearchResultRenderer.prototype.staleFileElement = function(item) {
         if (item.stale) {
-            var navGridHolder = this.explorer.getNavDict() ? this.explorer.getNavDict().getGridNavHolder(item, true) : null;
-            mNavUtils.removeNavGrid(navGridHolder, lib.node(this.getItemLinkId(item)));
-            var span = lib.node(this.getFileSpanId(item));
+        	// replace file icon and twistie with a warning icon
+        	var span = lib.node(this.getFileIconId(item));
             _empty(span);
-            _place(document.createTextNode(displayName ? displayName : this.explorer.model.getFileName(item)), span, "last"); //$NON-NLS-0$
-            span = lib.node(this.getFileIconId(item));
-            _empty(span);
+            span.classList.add("imageSprite"); //$NON-NLS-0$
+            span.classList.add("core-sprite-warning"); //$NON-NLS-0$
+            span.classList.add("staleSearchResultIcon"); //$NON-NLS-0$
+            
+            // add tooltip to warning icon
+            this.explorer.staleTooltips.push(new mTooltip.Tooltip({
+	            node: span,
+	            showDelay: 0,
+	            position: ["above", "right", "below"],
+	            text: messages["staleFileTooltip"]
+	        }));
         }
     };
     
@@ -182,18 +189,26 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
     	}
     	return renderName;
     };
+    
+    SearchResultRenderer.prototype._getFileNameElement = function(item) {
+    	var renderName = this._getFileRenderName(item);
+    	var fileSpan = document.createElement("span"); //$NON-NLS-0$
+    	
+    	fileSpan.classList.add("fileNameSpan"); //$NON-NLS-0$
+		fileSpan.appendChild(document.createTextNode(renderName));
+		
+		return fileSpan;
+    };
 
     SearchResultRenderer.prototype.replaceFileElement = function(item) {
-		var renderName = this._getFileRenderName(item);
 		if(item.totalMatches) {
+			var fileNameElement = this._getFileNameElement(item);
 			var linkDiv = lib.node(this.getItemLinkId(item));
-			var parentSpan = linkDiv.firstElementChild;
-			lib.empty(linkDiv);
-			linkDiv.appendChild(parentSpan);
-			linkDiv.appendChild(document.createTextNode(renderName));
+			linkDiv.removeChild(linkDiv.lastElementChild);
+			linkDiv.appendChild(fileNameElement);
 	    } else {
 			item.stale = true;
-			this.staleFileElement(item, renderName);
+			this.staleFileElement(item);
 	    }
     };
 
@@ -220,43 +235,59 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
         }
     };
 
-    SearchResultRenderer.prototype.renderFileElement = function(item, spanHolder, renderName) {
+    SearchResultRenderer.prototype.renderFileElement = function(item, spanHolder, resultModel) {
         var helper = null;
-        if (this.explorer.model._provideSearchHelper) {
-            helper = this.explorer.model._provideSearchHelper();
+        if (resultModel._provideSearchHelper) {
+            helper = resultModel._provideSearchHelper();
         }
 		var params = helper ? mSearchUtils.generateFindURLBinding(helper.params, helper.inFileQuery, null, helper.params.replace, true) : null;
 		var link = navigatorRenderer.createLink(null, 
-				{Location: item.location, Name: renderName}, 
+				{Location: item.location}, 
 				this.explorer._commandService, 
 				this.explorer._contentTypeService,
 				this.explorer._openWithCommands, 
-				{id:this.getItemLinkId(item)}, 
+				{id:this.getItemLinkId && this.getItemLinkId(item)}, 
 				params, 
 				{holderDom: this._lastFileIconDom});
 		mNavUtils.addNavGrid(this.explorer.getNavDict(), item, link);
 		
-		// create parent folder span and prepend to link
-		var scopeParams = this.explorer.model.getScopingParams(item);
-		var folders = scopeParams.name.split("/"); //$NON-NLS-0$
+		var scopeParams = resultModel.getScopingParams(item);
+		var folders = decodeURIComponent(scopeParams.name).split("/"); //$NON-NLS-0$
+		var parentFolder = folders.pop();
+		parentFolder = parentFolder;
+		
+		if (0 < folders.length) {
+			var fullPathSpan = document.createElement("span"); //$NON-NLS-0$
+			fullPathSpan.classList.add("fullPathSpan"); //$NON-NLS-0$
+			
+			var fullPathText = folders.join("/"); //$NON-NLS-0$
+			
+			fullPathSpan.appendChild(document.createTextNode(fullPathText + "/")); //$NON-NLS-0$
+			link.appendChild(fullPathSpan);
+			
+			var ellipsisSpan = document.createElement("span"); //$NON-NLS-0$
+			ellipsisSpan.classList.add("ellipsisSpan"); //$NON-NLS-0$
+			ellipsisSpan.appendChild(document.createTextNode(".../")); //$NON-NLS-0$
+			link.appendChild(ellipsisSpan);
+		}
+				
+		// create a direct parent folder span and prepend to link		
 		var parentSpan = document.createElement("span"); //$NON-NLS-0$
 		parentSpan.classList.add("fileParentSpan"); //$NON-NLS-0$
-		if (folders.length > 1) {
-			parentSpan.appendChild(document.createTextNode(".../")); //$NON-NLS-0$			
-		}
-		var parentFolder = folders[folders.length - 1];
-		parentFolder = decodeURIComponent(parentFolder);
 		parentSpan.appendChild(document.createTextNode(parentFolder + "/")); //$NON-NLS-0$
-		link.insertBefore(parentSpan, link.firstChild);
-		
-		//trigger a click on the span when the link is clicked
+		link.appendChild(parentSpan);
+				
+		var fileSpan = this._getFileNameElement(item);
+		link.appendChild(fileSpan);
+
+		//trigger a click on the span when the link is clicked to set the selection cursor
 		link.addEventListener("click", function(){ //$NON-NLS-0$
 			spanHolder.click();
 		});
 
 		// append link to parent span
         spanHolder.appendChild(link);
-        spanHolder.classList.add("fileNameSpan"); //$NON-NLS-0$
+        spanHolder.classList.add("filePathSpan"); //$NON-NLS-0$
     };
 
     SearchResultRenderer.prototype.generateContextTip = function(detailModel) {
@@ -394,10 +425,12 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
         spanHolder.appendChild(link);
         link.classList.add("searchDetailLink"); //$NON-NLS-0$
        
-       mNavUtils.addNavGrid(this.explorer.getNavDict(), item, link);
-        _connect(link, "click", function() { //$NON-NLS-0$
-            that.explorer.getNavHandler().cursorOn(item);
+       	mNavUtils.addNavGrid(this.explorer.getNavDict(), item, link);
+       	//trigger a click on the span when the link is clicked to set the selection cursor
+       	_connect(link, "click", function() { //$NON-NLS-0$
+       		spanHolder.click();
         });
+        
         var span = _createElement('span', null, null, link); //$NON-NLS-0$
         return span;
     };
@@ -475,11 +508,9 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
 				col = _createElement('td'); //$NON-NLS-0$
                 if (item.type === "file") { //$NON-NLS-0$
                 	span = _createSpan(null, this.getFileSpanId(item), col, null);
-                    var renderName = this._getFileRenderName(item);
-                    this.renderFileElement(item, span, renderName);
+                    this.renderFileElement(item, span, this.explorer.model);
                     
                     //render file location
-                    span = _createSpan(null, this.getLocationSpanId(item), col, null);
                     if (item.parentLocation) {
 						var scopeParams = this.explorer.model.getScopingParams(item);
 						tableRow.title = decodeURI(scopeParams.name + "/" + item.name); //$NON-NLS-0$
@@ -538,76 +569,70 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
                 h2 = _createElement('h2', null, null, th); //$NON-NLS-0$
                 h2.textContent = messages["Files replaced"];
                 break;
-            case 1:
-                th = _createElement('th', "search_report", null, null); //$NON-NLS-1$ //$NON-NLS-0$
-                h2 = _createElement('h2', null, null, th); //$NON-NLS-0$
-                h2.textContent = messages["Status"];
-                break;
         }
         return th;
     };
 
     SearchReportRenderer.prototype.getCellElement = function(col_no, item, tableRow) {
+    	var td = null;
         switch (col_no) {
             case 0:
-                var col = _createElement('td', "search_report", null, null); //$NON-NLS-1$ //$NON-NLS-0$
-                var span = _createElement('span', "primaryColumn", null, col); //$NON-NLS-1$ //$NON-NLS-0$
-
-                _place(document.createTextNode(item.model.fullPathName + "/" + this.explorer.resultModel.getFileName(item.model)), span, "only"); //$NON-NLS-1$ //$NON-NLS-0$
-                _connect(span, "click", function() { //$NON-NLS-0$
-                    window.open(item.model.linkLocation);
-                });
-                _connect(span, "mouseover", function() { //$NON-NLS-0$
-                    span.style.cursor = "pointer"; //$NON-NLS-0$
-                });
-                _connect(span, "mouseout", function() { //$NON-NLS-0$
-                    span.style.cursor = "default"; //$NON-NLS-0$
-                });
-                return col;
-            case 1:
-                var statusMessage;
+                td = _createElement("td", "search_report", null, null); //$NON-NLS-1$ //$NON-NLS-0$
+                
+                var fileSpan = _createSpan(null, null, td, null);
+                SearchResultRenderer.prototype.renderFileElement.call(this, item.model, fileSpan, this.explorer.resultModel);
+                
+                //render file location
+                var scopeParams = this.explorer.resultModel.getScopingParams(item.model);
+				tableRow.title = decodeURI(scopeParams.name + "/" + item.model.name); //$NON-NLS-0$
+                
                 if (item.status) {
-                    var td = _createElement('td', "search_report", null, null); //$NON-NLS-1$ //$NON-NLS-0$
-                    
-                    var operationIcon = _createElement('span', null, null, td); //$NON-NLS-1$ //$NON-NLS-0$
-	                operationIcon.classList.add('imageSprite'); //$NON-NLS-0$
-	                if (item.status) {
-	                    switch (item.status) {
-	                        case "warning": //$NON-NLS-0$
-	                            operationIcon.classList.add('core-sprite-warning'); //$NON-NLS-0$
-	                            break;
-	                        case "failed": //$NON-NLS-0$
-	                            operationIcon.classList.add('core-sprite-error'); //$NON-NLS-0$
-	                            break;
-	                        case "pass": //$NON-NLS-0$
-	                            operationIcon.classList.add('core-sprite-ok'); //$NON-NLS-0$
-	                            break;
-	                    }
-	                }
+                	var statusMessage;
+                	var linkNode = lib.$(".navlink", fileSpan); //$NON-NLS-0$
+                	var operationIcon = document.createElement("span"); //$NON-NLS-0$
+	                operationIcon.classList.add("imageSprite"); //$NON-NLS-0$
 	                
-	                switch (item.status) {
+                    switch (item.status) {
                         case "warning": //$NON-NLS-0$
-                            //intentional fall-through
+                            operationIcon.classList.add("core-sprite-warning"); //$NON-NLS-0$
+                            statusMessage = item.message;
+                            break;
                         case "failed": //$NON-NLS-0$
+                            operationIcon.classList.add("core-sprite-error"); //$NON-NLS-0$
                             statusMessage = item.message;
                             break;
                         case "pass": //$NON-NLS-0$
-                            statusMessage = item.model.totalMatches ? i18nUtil.formatMessage(messages["${0} out of ${1}  matches replaced."], item.matchesReplaced, item.model.totalMatches) : item.message; //$NON-NLS-0$
+                            operationIcon.classList.add("core-sprite-ok"); //$NON-NLS-0$
+                            statusMessage = item.model.totalMatches ? i18nUtil.formatMessage(messages["${0} out of ${1}  matches replaced"], item.matchesReplaced, item.model.totalMatches) : item.message; //$NON-NLS-0$
                             break;
                     }
-                    td.appendChild(document.createTextNode(statusMessage));
                     
-                    return td;
+                    linkNode.insertBefore(operationIcon, linkNode.firstElementChild);
+
+                    var statusMessageSpan = _createElement("span", "replacementStatusSpan", null, linkNode); //$NON-NLS-1$ //$NON-NLS-0$
+                    statusMessageSpan.appendChild(document.createTextNode("(" + statusMessage + ")")); //$NON-NLS-1$ //$NON-NLS-0$
                 }
         }
+        return td;
+    };
+    
+    SearchReportRenderer.prototype._getFileRenderName = function(item) {
+    	return this.explorer.resultModel.getFileName(item);
+    };
+    
+    SearchReportRenderer.prototype._getFileNameElement = function(item) {
+    	return SearchResultRenderer.prototype._getFileNameElement.call(this, item);
     };
 
     SearchReportRenderer.prototype.constructor = SearchReportRenderer;
 
-    function SearchReportExplorer(parentId, reportList, resultModel) {
+    function SearchReportExplorer(parentId, reportList, resultModel, commandService, contentTypeService, openWithCommands) {
         this.parentId = parentId;
         this.reportList = reportList;
         this.resultModel = resultModel;
+        this._commandService = commandService;
+        this._contentTypeService = contentTypeService;
+        this._openWithCommands = openWithCommands;
         this.renderer = new SearchReportRenderer({
             checkbox: false
         }, this);
@@ -636,26 +661,26 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
      * Creates a new search result explorer.
      * @name orion.InlineSearchResultExplorer
      */
-    function InlineSearchResultExplorer(registry, commandService, inlineSearchPane) {
+    function InlineSearchResultExplorer(registry, commandService, inlineSearchPane, preferences) {
         this.registry = registry;
         this._commandService = commandService;
         this.fileClient = new mFileClient.FileClient(this.registry);
         this.defaulRows = 40;
 		this._contentTypeService = new mContentTypes.ContentTypeRegistry(this.registry);
 		this._inlineSearchPane = inlineSearchPane;
+		this._preferences = preferences;
+		this.staleTooltips = [];
 		
-		this.selection = new mSelection.Selection(this.registry, "inlineSearchResultExplorerSelection"); //$NON-NLS-0$
-		var selectionListener = function(event) {
-			if (event.selections && event.selections[0]) {
-				var link = lib.node(this.renderer.getItemLinkId(event.selections[0]));
-				if (link) {
-					window.location = link.href;
-				}
+		var gotPreferences = this._preferences.getPreferences("/inlineSearchPane").then(function(prefs) { //$NON-NLS-0$
+			var show = prefs.get("showFullPath"); //$NON-NLS-0$
+			if (show === undefined) {
+				show = false;
+				prefs.put("showFullPath", show); //$NON-NLS-0$
 			}
-		}.bind(this);
-		this.selection.addEventListener("selectionChanged", selectionListener); //$NON-NLS-0$
+			this._shouldShowFullPath = show;
+		}.bind(this));
 		
-        this.declareCommands();
+        gotPreferences.then(this.declareCommands.bind(this));
     }
 
     InlineSearchResultExplorer.prototype = new mExplorer.Explorer();
@@ -669,6 +694,11 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
     InlineSearchResultExplorer.prototype.setResult = function(parentNode, model) {
         var that = this;
         this.parentNode = parentNode;
+        if (this._shouldShowFullPath) { //$NON-NLS-0$
+        	this.parentNode.classList.add("showFullPath"); //$NON-NLS-0$
+        } else {
+        	this.parentNode.classList.remove("showFullPath"); //$NON-NLS-0$
+        }
         this.model = model;
         if (this.model.replaceMode()) {
             this._hasCheckedItems = true;
@@ -741,13 +771,32 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
                 that.gotoNext(false, true);
             }
         });
+        
+        var switchFullPathCommand = new mCommands.Command({
+        	name: messages["fullPath"], //$NON-NLS-0$
+            tooltip: messages["switchFullPath"], //$NON-NLS-0$
+            imageClass : "sprite-switch-full-path", //$NON-NLS-0$
+            id: "orion.search.switchFullPath", //$NON-NLS-0$
+            groupId: "orion.searchGroup", //$NON-NLS-0$
+            type: "switch", //$NON-NLS-0$
+            checked: this._shouldShowFullPath,
+            visibleWhen: function(item) {
+                return (that.getItemCount() > 0);
+            },
+            callback: function() {
+                that.switchFullPath();
+                //TODO toggle tooltip
+            }
+        });
+        
         this._commandService.addCommand(nextResultCommand);
         this._commandService.addCommand(prevResultCommand);
-
         this._commandService.addCommand(replaceAllCommand);
+        this._commandService.addCommand(switchFullPathCommand);
+        
         this._commandService.addCommandGroup("searchPageActions", "orion.searchActions.unlabeled", 200); //$NON-NLS-1$ //$NON-NLS-0$
         
-         mExplorer.createExplorerCommands(this._commandService, function(item) {
+        mExplorer.createExplorerCommands(this._commandService, function(item) {
 			var emptyKeyword = false;
 			if(that.model._provideSearchHelper && that.model._provideSearchHelper().params.keyword === ""){
 				emptyKeyword = true;
@@ -756,11 +805,11 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
         });
         
         this._commandService.registerCommandContribution("searchPageActions", "orion.globalSearch.replaceAll", 1); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
-        
         this._commandService.registerCommandContribution("searchPageActions", "orion.explorer.expandAll", 2); //$NON-NLS-1$ //$NON-NLS-0$
         this._commandService.registerCommandContribution("searchPageActions", "orion.explorer.collapseAll", 3); //$NON-NLS-1$ //$NON-NLS-0$
         this._commandService.registerCommandContribution("searchPageActions", "orion.search.nextResult", 4); //$NON-NLS-1$ //$NON-NLS-0$
         this._commandService.registerCommandContribution("searchPageActions", "orion.search.prevResult", 5); //$NON-NLS-1$ //$NON-NLS-0$
+        this._commandService.registerCommandContribution("searchPageActions", "orion.search.switchFullPath", 6); //$NON-NLS-1$ //$NON-NLS-0$
     };
 
     InlineSearchResultExplorer.prototype._checkStale = function(model) {
@@ -839,16 +888,23 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
 
     InlineSearchResultExplorer.prototype.replaceAll = function() {
         var reportList = [];
-        var that = this;
         this._reporting = true;
         this.initCommands();
         this.reportStatus(messages["Writing files..."]);
         this.model.writeReplacedContents(reportList).then(function(modellist) {
-            _empty(that.getParentDivId());
-            var reporter = new SearchReportExplorer(that.getParentDivId(), reportList, that.model);
+            _empty(this.getParentDivId());
+            var reporter = new SearchReportExplorer(
+            	this.getParentDivId(), 
+            	reportList, 
+            	this.model, 
+            	this._commandService, 
+            	this._contentTypeService, 
+            	this._openWithCommands
+            );
             reporter.report();
-            that.reportStatus("");
-        });
+            this._inlineSearchPane.hideReplacePreview();
+            this.reportStatus("");
+        }.bind(this));
     };
 
     InlineSearchResultExplorer.prototype.toggleCompare = function(show) {
@@ -1175,6 +1231,7 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
     };
 
     InlineSearchResultExplorer.prototype.onReplaceCursorChanged = function(prevModel, currentModel) {
+    	this._inlineSearchPane.showReplacePreview();
         if (!_onSameFile(this._currentPreviewModel, currentModel)) {
             this.buildPreview();
         }
@@ -1184,7 +1241,7 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
 	        	// removed from diffs and must therefore be skipped.
 				var changeIndex = 0;
 				currentModel.parent.children.some(function(element){
-					if (currentModel === element) {
+					if (currentModel.location === element.location) {
 						return true;
 					} else if (element.checked) {
 						changeIndex++;
@@ -1381,11 +1438,32 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
         	}
         }
     };
+    
+    InlineSearchResultExplorer.prototype.switchFullPath = function() {
+    	this._preferences.getPreferences("/inlineSearchPane").then(function(prefs) { //$NON-NLS-0$
+			var show = !prefs.get("showFullPath"); //$NON-NLS-0$
+			if (show) { //$NON-NLS-0$
+	        	this.parentNode.classList.add("showFullPath"); //$NON-NLS-0$
+	        } else {
+	        	this.parentNode.classList.remove("showFullPath"); //$NON-NLS-0$
+	        }
+	        prefs.put("showFullPath", show); //$NON-NLS-0$
+			this._shouldShowFullPath = show;
+		}.bind(this));
+    };
 
 	InlineSearchResultExplorer.prototype._renderSearchResult = function(crawling, resultsNode, searchParams, jsonData, incremental) {
 		var foundValidHit = false;
 		var resultLocation = [];
 		lib.empty(lib.node(resultsNode));
+		
+		// cleanup dead tooltips
+		var deadTooltip = this.staleTooltips.pop();
+		while (deadTooltip) {
+			deadTooltip.destroy();
+			deadTooltip = this.staleTooltips.pop();
+		}
+		
 		if (jsonData.response.numFound > 0) {
 			for (var i=0; i < jsonData.response.docs.length; i++) {
 				var hit = jsonData.response.docs[i];
@@ -1394,8 +1472,12 @@ function(messages, require, Deferred, lib, mContentTypes, i18nUtil, mExplorer, m
 						foundValidHit = true;
 					}
 					var loc = hit.Location;
-					resultLocation.push({linkLocation: require.toUrl("edit/edit.html") +"#" + loc, location: loc, path: hit.Path ? hit.Path : loc, name: hit.Name, lastModified: hit.LastModified}); //$NON-NLS-1$ //$NON-NLS-0$
-					
+					var path = hit.Path;
+					if (!path) {
+						var rootURL = this.fileClient.fileServiceRootURL(loc);
+						path = loc.substring(rootURL.length); //remove file service root from path
+					}
+					resultLocation.push({linkLocation: require.toUrl("edit/edit.html") +"#" + loc, location: loc, path: path, name: hit.Name, lastModified: hit.LastModified}); //$NON-NLS-1$ //$NON-NLS-0$
 				}
 			}
 		}

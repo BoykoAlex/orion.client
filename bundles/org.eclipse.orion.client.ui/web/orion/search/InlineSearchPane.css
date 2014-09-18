@@ -5,7 +5,7 @@
 @import "../widgets/input/ComboTextInput.css";
 
 .searchResultsWrapperDiv .treeTableRow > td {
-	padding: 3px;
+	padding: 0 3px;
 	overflow: hidden;
 }
 
@@ -64,11 +64,11 @@
 }
 
 .searchWrapper.searchOptionsHidden > .searchResultsWrapperDiv{
-	height: calc(100% - 76px);
+	height: calc(100% - 78px);
 }
 
 .replaceModeActive > .searchResultsWrapperDiv {
-	height: calc(100% - 220px - 60px - 38px); /* subtract height of search options and replace box */
+	height: calc(100% - 220px - 60px - 40px); /* subtract height of search options and replace box */
 }
 
 .searchWrapper > .comboTextInputWrapper {
@@ -115,7 +115,7 @@
 }
 
 .fileNamePatternsTextInput {
-	min-width: 218px;
+	min-width: 219px;
 }
 
 .fileNamePatternsHint {
@@ -148,6 +148,7 @@
 
 .toggleSearchOptionsLink {
 	margin: 5px;
+	white-space: nowrap;
 }
 
 .searchMainOptionBlock {
@@ -169,7 +170,7 @@
 }
 .oneLine .searchOption {
 	display: inline-block;
-	margin-right: 40px;
+	margin-right: 28px;
 }
 .oneLine .searchOption:last-child {
 	margin: 0;
@@ -198,7 +199,7 @@
 
 .searchScopeElementWrapper {
 	display: inline-block;
-	width: 222px;
+	width: 224px;
 }
 
 .searchScopeElement {
@@ -252,18 +253,74 @@
 	height: calc(100% - 14px);
 }
 
-.fileNameSpan {
-	display: inline-block;
-	font-weight: bold;
+.filePathSpan {
+	display: inline-flex;
+	display: -webkit-inline-flex;		/* Safari */
 	outline: none;
-	padding: 2px;
+	padding: 0 2px;
 	vertical-align: middle;
+	white-space: nowrap;
+	width: 100%;
+}
+
+.filePathSpan > a.navlink {
+	align-items: baseline;
+	-webkit-align-items: baseline;		/* Safari */
+	display: inline-flex;
+	display: -webkit-inline-flex;		/* Safari */
+	padding: 7px 10px 7px 2px;
+	width: 100%;
+}
+
+.fullPathSpan {
+	color: #666 !important;
+	display: none;
+	flex-grow: 0;
+	flex-shrink: 2;
+	-webkit-flex-grow: 0;		/* Safari */
+	-webkit-flex-shrink: 2;		/* Safari */
+	font-size: 8pt; 
+	font-weight: normal;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.showFullPath .fullPathSpan {
+	display: inline-block;
+	min-width: 20px;
+}
+
+.fileNameSpan {
+	flex-grow: 0;
+	flex-shrink: 0;
+	-webkit-flex-grow: 0;		/* Safari */
+	-webkit-flex-shrink: 0;		/* Safari */
+	font-weight: bold;
+	margin-right: 5px;
 }
 
 .fileParentSpan {
 	color: #666 !important;
+	flex-grow: 0;
+	flex-shrink: 0;
+	-webkit-flex-grow: 0;		/* Safari */
+	-webkit-flex-shrink: 0;		/* Safari */
 	font-size: 8pt; 
 	font-weight: normal;
+}
+
+.ellipsisSpan {
+	color: #666 !important;
+	flex-grow: 0;
+	flex-shrink: 0;
+	-webkit-flex-grow: 0;		/* Safari */
+	-webkit-flex-shrink: 0;		/* Safari */
+	font-size: 8pt; 
+	font-weight: normal;
+}
+
+.showFullPath .ellipsisSpan {
+	display: none;
 }
 
 .replaceFileNameSpan {
@@ -280,7 +337,9 @@
 }
 
 .navlink.searchDetailLink {
+	padding: 5px 0;
 	vertical-align: baseline;
+	width: 100%;
 }
 
 /* search match occurrences */
@@ -356,8 +415,80 @@
 .searchPageActions {
 	display: block;
 	margin: 5px 0;
+	white-space: nowrap;
 }
 
 .searchPageActions > .orionButton > .core-sprite-move-down, .searchPageActions > .orionButton > .core-sprite-move-up {
 	padding-left: 0;
+}
+
+.sprite-switch-full-path {
+	font-size: 15px;
+	font-weight: bold;
+	line-height: normal;
+	vertical-align:middle;
+	color: #777;
+	padding-right:5px;
+	background: none;
+	border: none;
+	margin: 0;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+.orionSwitchInner.sprite-switch-full-path:before{
+	content: '/*/';
+	padding-top: 2px;
+	padding-left: 4px;
+}
+.orionSwitchInner.sprite-switch-full-path:after{
+	content: '.../';
+	padding-top: 2px;
+	padding-right: 4px;
+}
+
+.orionSwitch {
+	display: inline-block;
+	margin-bottom: 1px;
+	vertical-align: bottom;
+}
+
+.treeTableRow > td.search_report {
+	padding: 2px 0;
+	width: 100%;
+}
+
+.filePathSpan > .navlink > .imageSprite {
+	padding: 0 5px;
+}
+
+.filePathSpan > .navlink > .core-sprite-ok {
+	background-position: 0;
+	color: green;
+	flex-grow: 0;
+	flex-shrink: 0;
+	-webkit-flex-grow: 0;		/* Safari */
+	-webkit-flex-shrink: 0;		/* Safari */
+	font-size: 14px;
+	font-weight: bold;
+	height: auto;
+	width: auto;
+}
+
+.filePathSpan > .navlink > .core-sprite-ok:before {
+	content: '\2713'; /* check mark */
+}
+
+.replacementStatusSpan {
+	flex-grow: 0;
+	flex-shrink: 0;
+	-webkit-flex-grow: 0;		/* Safari */
+	-webkit-flex-shrink: 0;		/* Safari */
+	white-space: nowrap;
+}
+
+.imageSprite.staleSearchResultIcon {
+	color: #d8ab27;
+	font-size: 14px;
+	padding: 3px 0 0 17px;	
 }
