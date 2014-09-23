@@ -1108,6 +1108,41 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 				this._textView.focus();
 			}
 		},
+		
+		/**
+		 * Shows a tooltip cotaining passed content at a certain position in the document.
+		 * 
+		 * @param content tooltips content can be String, can be HTML see tooltip.js
+		 * @param (Integer) offset Position in the document
+		 */
+		showTooltip: function(content, offset) {
+			var location;
+			if (offset) {
+				location = this._textView.getLocationAtOffset(offset, true);
+				// Translate to page coordinates
+				this._textView.convert(location, "document", "page");
+			} else {
+				location = {
+					x: this._listener.lastMouseX,
+					y: this._listener.lastMouseY
+				};
+			}
+			var tooltip = mTooltip.Tooltip.getTooltip(this._textView);
+			if (!tooltip) {
+				return;
+			}
+			tooltip.setTarget({
+				getTooltipInfo : function() {
+					var info = {
+						x : location.x,
+						y : location.y,
+						contents : content
+					};
+					return info;
+				}
+			});
+		},
+		
 		/**
 		 * Reveals a line in the editor, and optionally selects a portion of the line.
 		 * @param {Number} line - document base line index

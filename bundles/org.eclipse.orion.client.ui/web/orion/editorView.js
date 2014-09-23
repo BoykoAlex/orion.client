@@ -493,13 +493,15 @@ define([
 				"getSelection", "setSelection", //$NON-NLS-1$ //$NON-NLS-0$
 				"getText", "setText", //$NON-NLS-1$ //$NON-NLS-0$
 				"getLineAtOffset", //$NON-NLS-0$
-				"getLineStart" //$NON-NLS-0$
+				"getLineStart", //$NON-NLS-0$
+				"showTooltip" //$NON-NLS-0$
 			].forEach(function(method) {
 				contextImpl[method] = editor[method].bind(editor);
 				liveContextImpl[method] = editor[method].bind(editor);
 			});
 			liveContextImpl["markClean"] = editor.markClean.bind(editor);
 			liveContextImpl["isDirty"] = editor.isDirty.bind(editor);
+			liveContextImpl["showTooltip"] = editor.showTooltip.bind(editor);
 			liveContextImpl.showMarkers = function(markers) {
 				serviceRegistry.getService("orion.core.marker")._setProblems(markers);
 			};

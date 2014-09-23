@@ -1863,7 +1863,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 		 * @see orion.editor.TextView#getOffsetAtLocation
 		 * @see orion.editor.TextView#convert
 		 */
-		getLocationAtOffset: function(offset) {
+		getLocationAtOffset: function(offset, bottom) {
 			if (!this._clientDiv) { return {x: 0, y: 0}; }
 			var model = this._model;
 			offset = Math.min(Math.max(0, offset), model.getCharCount());
@@ -1872,7 +1872,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 			var rect = line.getBoundingClientRect(offset);
 			line.destroy();
 			var x = rect.left;
-			var y = this._getLinePixel(lineIndex) + rect.top;
+			var y = this._getLinePixel(lineIndex) + (bottom ? rect.bottom : rect.top);
 			return {x: x, y: y};
 		},
 		/**
