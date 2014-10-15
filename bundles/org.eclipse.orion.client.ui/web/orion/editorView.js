@@ -19,6 +19,7 @@ define([
 	'orion/editor/textModel',
 	'orion/editor/projectionTextModel',
 	'orion/editor/editorFeatures',
+	'orion/hover',
 	'orion/editor/contentAssist',
 	'orion/editor/emacs',
 	'orion/editor/vi',
