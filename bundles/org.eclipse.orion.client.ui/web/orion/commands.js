@@ -148,7 +148,7 @@ define([
 				} else {
 					// CTRL or ALT combinations are not characters, however both of them together (CTRL+ALT)
 					// are the Alt Gr key on some keyboards.  See Eclipse bug 20953. If together, they might
-					// be a character.
+					// be a character. However there aren't usually any commands associated with Alt Gr keys.
 					if (e.ctrlKey && !e.altKey) {
 						// special case for select all, cut, copy, paste, and undo.  
 						if (!e.shiftKey && (e.keyCode === 65 || e.keyCode === 67 || e.keyCode === 86 || e.keyCode === 88 || e.keyCode === 90)) {
@@ -157,6 +157,9 @@ define([
 						return false;
 					}
 					if (e.altKey && !e.ctrlKey) {
+						return false;
+					}
+					if (e.ctrlKey && e.altKey){
 						return false;
 					}
 				}
@@ -447,24 +450,45 @@ define([
 				var done = function() {onClick.call(commandInvocation.handler, commandInvocation);};
 				command.onClick = onClick;
 				clickTarget.addEventListener("click", function(e) { //$NON-NLS-0$
+					var onClickThen;
 					if (command.type === "switch" || command.type === "toggle") { //$NON-NLS-1$ //$NON-NLS-0$
-						if (command.type === "toggle") { //$NON-NLS-0$
-							command.checked = !command.checked;
-							if (command.checked) {
-								element.classList.remove("orionPushToggleOff"); //$NON-NLS-0$
-								element.classList.add("orionPushToggleOn"); //$NON-NLS-0$
-								element.classList.add("orionToggleAnimate"); //$NON-NLS-0$
-							} else {
-								element.classList.remove("orionPushToggleOn"); //$NON-NLS-0$
-								element.classList.add("orionPushToggleOff"); //$NON-NLS-0$
-								element.classList.add("orionToggleAnimate"); //$NON-NLS-0$
+						onClickThen = function (doIt) {
+							if (command.type === "toggle") { //$NON-NLS-0$
+								if(doIt) {
+									command.checked = !command.checked;
+								}
+								if (command.checked) {
+									element.classList.remove("orionToggleOff"); //$NON-NLS-0$
+									element.classList.add("orionToggleOn"); //$NON-NLS-0$
+									element.classList.add("orionToggleAnimate"); //$NON-NLS-0$
+								} else {
+									element.classList.remove("orionToggleOn"); //$NON-NLS-0$
+									element.classList.add("orionToggleOff"); //$NON-NLS-0$
+									element.classList.add("orionToggleAnimate"); //$NON-NLS-0$
+								}
+							}else {
+								if(doIt) {
+									command.checked = input.checked;
+								} else {
+									input.checked = !input.checked;
+								}
 							}
-						}else {
-							command.checked = input.checked;
-						}
-						window.setTimeout(done, 310);
+							if(doIt) {
+								window.setTimeout(done, 250);
+							}
+						};
 					} else {
-						done();
+						onClickThen = function (doIt) { if(doIt) {
+								done();
+							}
+						};
+					}
+					if(command.preCallback) {
+						command.preCallback(commandInvocation).then( function(doIt) {
+							onClickThen(doIt);
+						});
+					} else {
+						onClickThen(true);
 					}
 					e.stopPropagation();
 				}, false);
@@ -687,6 +711,7 @@ define([
 			this.name = options.name;
 			this.tooltip = options.tooltip;
 			this.callback = options.callback; // optional callback that should be called when command is activated (clicked)
+			this.preCallback = options.preCallback; // optional callback that should be called when command is activated (clicked)
 			this.hrefCallback = options.hrefCallback; // optional callback that returns an href for a command link
 			this.choiceCallback = options.choiceCallback; // optional callback indicating that the command will supply secondary choices.  
 														// A choice is an object with a name, callback, and optional image

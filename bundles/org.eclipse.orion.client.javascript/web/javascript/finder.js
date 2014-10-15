@@ -52,11 +52,16 @@ define([
 					this.globals = [];
 					this.scopes = [{range: node.range, occurrences: [], kind:'p'}];   //$NON-NLS-0$
 					this.defscope = null;
+					this.skipScope = null;
 					break;
 				case Estraverse.Syntax.FunctionDeclaration:
 					this.checkId(node.id, true);
-					//we want the parent scope for a declaration, otherwise we leave it right away
 					this._enterScope(node);
+					if (this.skipScope){
+						// If the function decl was a redefine, checkId may set skipScope and we can skip processing the contents
+						return Estraverse.VisitorOption.Skip;
+					}
+					
 					if (node.params) {
 						len = node.params.length;
 						for (idx = 0; idx < len; idx++) {
@@ -230,7 +235,7 @@ define([
 						break;
 					case Estraverse.Syntax.FunctionExpression:
 						if (!node.isprop){
-							this.scopes.push({range: node.range, occurrences: [], kind:'fe'});  //$NON-NLS-0$
+							this.scopes.push({range: node.body.range, occurrences: [], kind:'fe'});  //$NON-NLS-0$
 							// If the outer scope has the selected 'this' we can skip the inner scope
 							if (this.defscope){
 								return true;
@@ -267,7 +272,15 @@ define([
 						break;
 				}
 				if (kind){
-					this.scopes.push({range: node.range, occurrences: [], kind:kind});	
+					// Include the params and body in the scope, but not the identifier
+					var rng = node.range[0];
+					if (node.body){
+						rng = node.body.range[0];
+					}
+					if (node.params && (node.params.length > 0)){
+						rng = node.params[0].range[0];
+					}
+					this.scopes.push({range: [rng,node.range[1]], occurrences: [], kind:kind});	
 				}
 			}
 			return false;
@@ -353,6 +366,14 @@ define([
 		 */
 		_popScope: function() {
 			var scope = this.scopes.pop();
+			
+			if (this.skipScope){
+				if (this.skipScope === scope){
+					this.skipScope = null;
+				}
+				return false;
+			}
+			
 			var len = scope.occurrences.length;
 			var i;
 			if(this.defscope) {
@@ -383,6 +404,9 @@ define([
 		 * @returns {Boolean} <code>true</code> if we should skip the next nodes, <code>false</code> otherwise
 		 */
 		checkId: function(node, candefine, isObjectProp, isLabeledStatement) {
+			if (this.skipScope){
+				return true;
+			}
 			if (this.thisCheck){
 				return false;
 			}
@@ -396,18 +420,26 @@ define([
 				if (node.name === this.context.word) {
 					var scope = this.scopes[this.scopes.length-1]; // Always will have at least the program scope
 					if(candefine) {
+						// Check if we are redefining
 						if(this.defscope) {
-							// Re-defining, we want the last defining node previous to the selection, skip any future re-defines
-							if(node.range[0] > this.context.start) {
-								return true;
+							if((scope.range[0] <= this.context.start) && (scope.range[1] >= this.context.end)) {
+								// Selection inside this scope, use this scope as the defining scope
+								this.occurrences = []; // Clear any occurrences in sibling scopes
+								this.defscope = scope;
+								scope.occurrences.push({
+									start: node.range[0],
+									end: node.range[1]
+								});
+								return false;
 							} else {
-								// Occurrences collected for the previous define are now invalid, fall through to mark this occurrence
-								this.occurrences = [];
-								scope.occurrences = [];
+								// Selection belongs to an outside scope so use the outside definition
+								scope.occurrences = []; // Clear any occurrences we have found in this scope
+								this.skipScope = scope;  // Skip this scope and all inner scopes
+								return true;  // Where possible we short circuit checking this scope
 							}
 						}
 						//does the scope enclose it?
-						if(scope && (scope.range[0] <= this.context.start) && (scope.range[1] >= this.context.end)) {
+						if((scope.range[0] <= this.context.start) && (scope.range[1] >= this.context.end)) {
 							this.defscope = scope;
 						}
 					}
@@ -668,6 +700,139 @@ define([
 				}
 			}
 			return blocks;
+		},
+		
+		/**
+		 * Object of search kinds
+		 */
+		SearchOptions: {
+		    FUNCTION_DECLARATION: 0,
+		    IDENTIFIER: 1
+		},
+		
+		/**
+		 * @name findDeclaration
+		 * @description Will attempt to find the declaration of the node at the given
+		 * offset. If it cannot be computed <code>null</code> is returned.
+		 * @function
+		 * @param {Number} offset The offset into the source file
+		 * @param {Object} ast The AST to search
+		 * @param {Object} options The options to search with
+		 * @returns {Object|null} Return the found declaration AST node or <code>null</code>
+		 * @since 7.0
+		 */
+		findDeclaration: function findDeclaration(offset, ast, options) {
+		    //TODO for now do a lookup from the AST, this function will ultimately delegate
+		    //to whatever ENV we use 
+		    var id = options.id;
+		    if(!id) {
+		        return null;
+		    }
+		    var kind = options.kind;
+		    if(typeof(kind) === 'undefined') {
+		        return null;
+		    }
+		    this._declFinder.offset = offset;
+		    this._declFinder.id = id;
+		    this._declFinder.kind = kind;
+		    this._declFinder.enter = this._declFinder.enter.bind(this._declFinder);
+		    this._declFinder.leave = this._declFinder.leave.bind(this._declFinder);
+		    Estraverse.traverse(ast, this._declFinder);
+		    var scope = this._declFinder.scopes.pop();
+		    while(scope) {
+		        var decl = scope.decls.pop();
+		        if(decl) {
+		            return decl;
+		        }
+		        scope = this._declFinder.scopes.pop();
+		    }
+		    return null;
+		},
+		
+		/**
+		 * An AST visitor to find a declaration of a certain type
+		 * @since 7.0
+		 */
+		_declFinder: {
+		    enter: function(node) {
+		         switch(node.type) {
+		             case 'Program': {
+		                 this.scopes = [];
+		                 this.decl = null;
+		                 this.offsetscope = null;
+		                 this.scopes.push({type: node.type, range: node.range, decls: []});
+		                 break;
+		             }
+		             case 'FunctionDeclaration': {
+		                 if(this.offsetscope) {
+		                     return Estraverse.VisitorOption.Skip;
+		                 }
+		                 if(this._checkScope(node)) {
+		                     return Estraverse.VisitorOption.Break;
+		                 }
+		                 if(this.kind === Finder.SearchOptions.FUNCTION_DECLARATION && 
+		                          node.id && node.id.name === this.id) {
+		                      this._pushDecl(node);
+		                 }
+		                 this.scopes.push({type: node.type, range: node.range, decls: []});
+		                 break;
+		             }
+		             case 'FunctionExpression': {
+		                 if(this.offsetscope) {
+		                     return Estraverse.VisitorOption.Skip;
+		                 }
+		                 if(this._checkScope(node)) {
+		                     return Estraverse.VisitorOption.Break;
+		                 }
+		                 this.scopes.push({type: node.type, range: node.range, decls: []});
+		                 break;
+		             }
+		             case 'VariableDeclarator': {
+		                 if(this.kind === Finder.SearchOptions.IDENTIFIER && 
+		                          node.id && node.id.name === this.id) {
+		                    this._pushDecl(node);
+                	            if(this.offsetscope) {
+                	                return Estraverse.VisitorOption.Break;
+                	            }
+		                 }
+		                 break;
+		             }
+		             default: {
+		                 if(this._checkScope(node)) {
+		                     return Estraverse.VisitorOption.Break;
+		                 }
+		             }
+		         }
+		         
+	        },
+	        leave: function(node) {
+	            switch(node.type) {
+	                case 'FunctionDeclaration': 
+	                case 'FunctionExpression': {
+	                    if(this.offsetscope && this.offsetscope.decls.length > 0) {
+	                        return Estraverse.VisitorOption.Break;
+	                    }
+	                    if(node.range[1] <= this.offset) {
+	                       this.scopes.pop();
+	                    }
+	                    break;
+	                }
+	            }
+	        },
+	        _checkScope: function(node) {
+	            if(!this.offsetscope && node.range[0] > this.offset) {
+		             //we found the node, if there are decls stop
+		             this.offsetscope = this.scopes[this.scopes.length-1];
+		             if(this.offsetscope.decls.length > 0) {
+		                 return true;
+		             }
+                 }
+                 return false;
+	        },
+	        _pushDecl: function _checkDecl(node) {
+	            var scope = this.scopes[this.scopes.length-1];
+	            scope.decls.push(node);
+	        }
 		},
 		
 		/**

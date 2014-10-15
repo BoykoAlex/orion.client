@@ -62,6 +62,8 @@ define([
 		this.authorQuery = "";
 		this.committerQuery = "";
 		this.sha1Query = "";
+		this.fromDateQuery = "";
+		this.toDateQuery = "";
 	}
 	GitCommitListModel.prototype = Object.create(mExplorer.Explorer.prototype);
 	objects.mixin(GitCommitListModel.prototype, /** @lends orion.git.GitCommitListModel.prototype */ {
@@ -71,7 +73,7 @@ define([
 			onItem(this.root);
 		},
 		getQueries: function(extraQuery) {
-			return util.generateQuery([pageQuery, this.filterQuery, this.authorQuery, this.committerQuery, this.sha1Query, extraQuery]);
+			return util.generateQuery([pageQuery, this.filterQuery, this.authorQuery, this.committerQuery, this.sha1Query, this.fromDateQuery, this.toDateQuery, extraQuery]);
 		},
 		_getRepository: function(parentItem) {
 			var that = this;
@@ -123,7 +125,7 @@ define([
 			var targetRef = this.getTargetReference();
 			var location = (activeBranch.CommitLocation || activeBranch.Location) + that.repositoryPath  + that.getQueries();
 			var id = targetRef.Name;
-			return that.progressService.progress(that.gitClient.getLog(location, id), messages['Getting git incoming changes...']).then(function(resp) {
+			return that.progressService.progress(that.gitClient.getLog(location, id), messages['GetGitIncomingMsg']).then(function(resp) {
 				return that.incomingCommits = resp;
 			});
 		},
@@ -157,7 +159,7 @@ define([
 			return util.tracksRemoteBranch(this.currentBranch);
 		},
 		isFiltered: function() {
-			return this.filterQuery || this.authorQuery || this.committerQuery || this.sha1Query || this.repositoryPath;
+			return this.filterQuery || this.authorQuery || this.committerQuery || this.sha1Query || this.repositoryPath || this.fromDateQuery || this.toDateQuery;
 		},
 		isRebasing: function() {
 			var repository = this.root.repository;
@@ -174,6 +176,7 @@ define([
 					that.log = parentItem.log = log;
 					var children = log.Children.slice(0);
 					onComplete(that.processChildren(parentItem, that.processMoreChildren(parentItem, children, log)));
+					return log;
 				}, function(error){
 					that.handleError(error);
 				});
@@ -205,6 +208,7 @@ define([
 							return;
 						}
 						repository.ActiveBranch = currentBranch.CommitLocation;
+						repository.CurrentBranch = currentBranch;
 						var activeBranch = that.getActiveBranch();
 						var targetRef = that.getTargetReference();
 						if (section) {
@@ -216,23 +220,24 @@ define([
 						}
 						if (progress) progress.done();
 						if (that.simpleLog) {
+							that.outgoingItem = that.incomingItem = that.syncItem = null;
 							return getSimpleLog();
 						} else {
 							return Deferred.when(repository.status || (repository.status = that.progressService.progress(that.gitClient.getGitStatus(repository.StatusLocation), messages['Getting changes'])), function(status) { //$NON-NLS-0$
 								repository.status = status;
 								onComplete(that.processChildren(parentItem, [
 									status,
-									{
+									that.outgoingItem = {
 										Type: "Outgoing", //$NON-NLS-0$
 										selectable: false,
 										isNotSelectable: true,
 									},
-									{
+									that.incomingItem = {
 										Type: "Incoming", //$NON-NLS-0$
 										selectable: false,
 										isNotSelectable: true,
 									},
-									{
+									that.syncItem = {
 										Type: "Synchronized", //$NON-NLS-0$
 										selectable: false,
 										isNotSelectable: true,
@@ -282,6 +287,9 @@ define([
 						outgoingCommits.Children.forEach(function(commit) {
 							commit.outgoing = true;
 						});
+						if (outgoingCommits.Children[0]) {
+							outgoingCommits.Children[0].top = true;
+						}
 						onComplete(that.processChildren(parentItem, that.processMoreChildren(parentItem, outgoingCommits.Children.slice(0), outgoingCommits)));
 					}, function(error){
 						that.handleError(error);
@@ -294,6 +302,9 @@ define([
 							log.Children.forEach(function(commit) {
 								commit.outgoing = true;
 							});
+							if (log.Children[0]) {
+								log.Children[0].top = true;
+							}
 							children = that.processMoreChildren(parentItem, log.Children.slice(0), log);
 						} 
 						onComplete(that.processChildren(parentItem, children));
@@ -306,12 +317,19 @@ define([
 			} else if (parentItem.Type === "Synchronized") { //$NON-NLS-0$
 				if (tracksRemoteBranch) {
 					return Deferred.when(parentItem.more ? that._getLog(parentItem) : that.syncCommits || that._getSync(), function(syncCommits) {
+						syncCommits.Children.forEach(function(commit) {
+							commit.history = true;
+						});
 						onComplete(that.processChildren(parentItem, that.processMoreChildren(parentItem, syncCommits.Children.slice(0), syncCommits)));
 					}, function(error) {
 						that.handleError(error);
 					});
 				} else if (!that.getTargetReference()) {
-					getSimpleLog();
+					getSimpleLog().then(function(syncCommits){
+						syncCommits.Children.forEach(function(commit) {
+							commit.history = true;
+						});					
+					});
 				} else {
 					onComplete(that.processChildren(parentItem, []));
 				}
@@ -414,9 +432,12 @@ define([
 			case "rebase": //$NON-NLS-0$
 			case "merge": //$NON-NLS-0$
 			case "mergeSquash": //$NON-NLS-0$
-			case "commit": //$NON-NLS-0$
 			case "reset": //$NON-NLS-0$
 				this.changedItem();
+				break;
+			case "commit": //$NON-NLS-0$
+			case "revert": //$NON-NLS-0$
+				this.changedItem(this.model.outgoingItem);
 				break;
 			case "applyPatch":  //$NON-NLS-0$
 			case "stage": //$NON-NLS-0$
@@ -485,17 +506,28 @@ define([
 			if (!this.section) return;
 			var sections = [], mainSection;
 			var doFilter = function() {
-				sections.forEach(function(s) {
-					var prop = s.query + "Query"; //$NON-NLS-0$
+				if (sections.every(function(s) {
+					var prop = s.query.key + "Query"; //$NON-NLS-0$
 					var field = lib.$(".gitFilterInput", s.domNode); //$NON-NLS-0$
-					if (s.query === "path") { //$NON-NLS-0$
-						this.repositoryPath = this.model.repositoryPath = field.value;
+					if (field.value && s.query.isValid) {
+						if (!s.query.isValid(field.value)) {
+							field.classList.add("invalidParam"); //$NON-NLS-0$
+							field.select();
+							return false;
+						}
+					} 
+					if (s.query.setValue) {
+						s.query.setValue(field.value);
 					} else {
-						this.model[prop] = field.value ? s.query + "=" + encodeURIComponent(field.value) : ""; //$NON-NLS-0$
+						s.query.value = field.value;
 					}
-				}.bind(this));
-				mainSection.setHidden(true);
-				this.changedItem();
+					this.model[prop] = s.query.createQuery();
+					field.classList.remove("invalidParam"); //$NON-NLS-0$
+					return true;
+				}.bind(this))) {
+					mainSection.setHidden(true);
+					this.changedItem();
+				}
 			}.bind(this);
 			function doClear() {
 				sections.forEach(function(s) {
@@ -507,7 +539,7 @@ define([
 			var blurHandler = function(e) {
 				var relatedTarget = e.relatedTarget || e.toElement;
 				function check(focus) {
-					if (!(lib.contains(mainSection.domNode, focus) || lib.contains(mainSection.getContentElement(), focus))) {
+					if (!(focus === document.body || lib.contains(mainSection.domNode, focus) || lib.contains(mainSection.getContentElement(), focus))) {
 						mainSection.setHidden(true);
 					}
 				}
@@ -541,10 +573,14 @@ define([
 				section.domNode.classList.add("gitFilterBox"); //$NON-NLS-0$
 				var filter = document.createElement("input"); //$NON-NLS-0$
 				filter.className = "gitFilterInput"; //$NON-NLS-0$
-				filter.placeholder = messages["Filter " + query];
+				filter.placeholder = messages["Filter " + query.key];
 				section.query = query;
 				section.searchBox.appendChild(filter);
 				filter.addEventListener("keydown", keyHandler); //$NON-NLS-0$
+				filter.addEventListener("input", function(event) { //$NON-NLS-0$
+					event.target.classList.remove("invalidParam"); //$NON-NLS-0$
+				});
+				
 				if (expandOnFocus) {
 					filter.addEventListener("focus", function(){ //$NON-NLS-0$
 						section.setHidden(false);
@@ -575,11 +611,9 @@ define([
 				if (event.isExpanded) {
 					sections.forEach(function(s) {
 						var field = lib.$(".gitFilterInput", s.domNode); //$NON-NLS-0$
-						if (s.query === "path") { //$NON-NLS-0$
-							field.value = this.model.repositoryPath;
-						} else {
-							var prop = s.query + "Query"; //$NON-NLS-0$
-							field.value = decodeURIComponent(this.model[prop].split("=")[1] || ""); //$NON-NLS-0$
+						var result = s.query.getValue ? s.query.getValue() : s.query.value;
+						if (result !== undefined) {
+							field.value = result;
 						}
 					}.bind(this));
 				} else {
@@ -589,24 +623,85 @@ define([
 				}
 			}.bind(this));
 
+			
+			var createStringQuery = function() {
+				return this.value ? this.key + "=" + encodeURIComponent(this.value) : ""; //$NON-NLS-0$ 
+			};
+			
+			var createDateQuery = function() {
+				return this.value ? this.key + "=" + new Date(this.calcDate ? this.calcDate : this.value).getTime() : ""; //$NON-NLS-0$ 
+			};
+			
+			var calculateDate = function(date) {
+				var relativePattern = /^([1-9][0-9]*)([hdwmy])$|^([N|n]ow)$/;
+				var result = relativePattern.exec(date);
+				if (result) {
+					var number = result[1];
+					var type = result[2];
+					var now = result[3];
+					if (number && type) {
+						var tempDate = new Date();
+						switch (type) {
+							case "h":  //$NON-NLS-0$
+								date = tempDate.setHours(tempDate.getHours() - number);
+								break;
+							case "d":  //$NON-NLS-0$
+								date = tempDate.setDate(tempDate.getDate() - number);
+								break;
+							case "w":  //$NON-NLS-0$
+								date = tempDate.setDate(tempDate.getDate() - (number*7));
+								break;
+							case "m":  //$NON-NLS-0$
+								date = tempDate.setMonth(tempDate.getMonth() - number);
+								break;
+							case "y":  //$NON-NLS-0$
+								date = tempDate.setFullYear(tempDate.getFullYear() - number);
+								break;
+						}
+					} else if (now) {
+						date = new Date();
+					}
+				}
+				return date;
+			};
+			
+			var isValidDate = function(date) {
+				this.calcDate = calculateDate(date);
+				var d = new Date(this.calcDate);
+				return !isNaN(d.valueOf());
+			};
+			
 			content = mainSection.getContentElement();
-			var messageSection = createSection(content, null, messages["Message:"], "filter"); //$NON-NLS-0$
+			var messageSection = createSection(content, null, messages["Message:"], {key: "filter", createQuery: createStringQuery}); //$NON-NLS-0$
 			messageSection.domNode.classList.add("commitFilter"); //$NON-NLS-0$
 			messageSection.getContentElement().classList.add("commitFilter"); //$NON-NLS-0$
 
-			var authorSection = createSection(content, null, messages["Author:"], "author"); //$NON-NLS-0$
+			var authorSection = createSection(content, null, messages["Author:"],  {key: "author", createQuery: createStringQuery}); //$NON-NLS-0$
 			authorSection.domNode.classList.add("commitFilter"); //$NON-NLS-0$
 			authorSection.getContentElement().classList.add("commitFilter"); //$NON-NLS-0$
 
-			var committerSection = createSection(content, null, messages["Committer:"], "committer"); //$NON-NLS-0$
+			var committerSection = createSection(content, null, messages["Committer:"],  {key: "committer", createQuery: createStringQuery}); //$NON-NLS-0$
 			committerSection.domNode.classList.add("commitFilter"); //$NON-NLS-0$
 			committerSection.getContentElement().classList.add("commitFilter"); //$NON-NLS-0$
 
-			var sha1Section = createSection(content, null, messages["SHA1:"], "sha1"); //$NON-NLS-0$
+			var sha1Section = createSection(content, null, messages["SHA1:"],  {key: "sha1", createQuery: createStringQuery}); //$NON-NLS-0$
 			sha1Section.domNode.classList.add("commitFilter"); //$NON-NLS-0$
 			sha1Section.getContentElement().classList.add("commitFilter"); //$NON-NLS-0$
-
-			var pathSection = createSection(content, null, messages["Path:"], "path", true, false, true, true); //$NON-NLS-0$
+			
+			var fromDateSection = createSection(content, null, messages["fromDate:"],  {key: "fromDate", createQuery: createDateQuery, isValid: isValidDate, calcDate: ""}); //$NON-NLS-0$
+			fromDateSection.domNode.classList.add("commitFilter"); //$NON-NLS-0$
+			fromDateSection.getContentElement().classList.add("commitFilter"); //$NON-NLS-0$
+			
+			var toDateSection = createSection(content, null, messages["toDate:"],  {key: "toDate", createQuery: createDateQuery, isValid: isValidDate, calcDate: ""}); //$NON-NLS-0$
+			toDateSection.domNode.classList.add("commitFilter"); //$NON-NLS-0$
+			toDateSection.getContentElement().classList.add("commitFilter"); //$NON-NLS-0$
+			var that = this;
+			var pathSection = createSection(content, null, messages["Path:"],  {
+				key: "path", //$NON-NLS-0$
+				createQuery: function() {return "";}, 
+				getValue: function() {return that.model.repositoryPath;}, 
+				setValue: function(s) {that.repositoryPath = that.model.repositoryPath = s;}
+			}, true, false, true, true);
 			pathSection.domNode.classList.add("commitFilter"); //$NON-NLS-0$
 			pathSection.getContentElement().classList.add("pathFilter"); //$NON-NLS-0$
 			pathSection.domNode.tabIndex = -1;
@@ -671,6 +766,8 @@ define([
 			sections.push(authorSection);
 			sections.push(committerSection);
 			sections.push(sha1Section);
+			sections.push(fromDateSection);
+			sections.push(toDateSection);
 			sections.push(pathSection);
 		},
 		display: function() {
@@ -883,7 +980,6 @@ define([
 				commandService.registerCommandContribution(incomingActionScope, "eclipse.orion.git.merge", 300); //$NON-NLS-0$
 				commandService.registerCommandContribution(incomingActionScope, "eclipse.orion.git.mergeSquash", 350); //$NON-NLS-1$ //$NON-NLS-0$
 				commandService.registerCommandContribution(incomingActionScope, "eclipse.orion.git.rebase", 200); //$NON-NLS-0$
-				commandService.registerCommandContribution(incomingActionScope, "eclipse.orion.git.resetIndex", 400); //$NON-NLS-0$
 				commandService.renderCommands(incomingActionScope, incomingActionScope, targetRef, this, "tool"); //$NON-NLS-0$
 
 				commandService.addCommandGroup(outgoingActionScope, "eclipse.gitPushGroup", 1000, messages['pushGroup'], null, null, null, "Push", null, "eclipse.orion.git.push"); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
@@ -1142,7 +1238,7 @@ define([
 				noCommit.appendChild(title);
 				
 				var description = document.createElement("div"); //$NON-NLS-0$
-				description.textContent = messages["You have no outgoing or incoming commits."];
+				description.textContent = messages["NoOutgoingIncomingCommits"];
 				noCommit.appendChild(description);
 			}
 			

@@ -4,10 +4,9 @@ var uiTestFunc = null;
 
 define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred', 'orion/cfui/cFClient', 'orion/PageUtil', 'orion/selection',
 	'orion/URITemplate', 'orion/PageLinks', 'orion/preferences', 'cfui/cfUtil', 'orion/objects', 'orion/widgets/input/ComboTextInput',
-	'orion/webui/Wizard'], 
-		function(mBootstrap, xhr, lib, Deferred, CFClient, PageUtil, mSelection, URITemplate, PageLinks, Preferences, mCfUtil, objects, ComboTextInput, Wizard) {
-
-	var cloudManageUrl;
+	'orion/webui/Wizard', 'orion/fileClient', 'orion/urlUtils'], 
+		function(mBootstrap, xhr, lib, Deferred, CFClient, PageUtil, mSelection, URITemplate, PageLinks, 
+				Preferences, mCfUtil, objects, ComboTextInput, Wizard, mFileClient, URLUtil) {
 	
 	mBootstrap.startup().then(
 		function(core) {
@@ -22,11 +21,15 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 			document.getElementById('title').appendChild(document.createTextNode("Configure Application Deployment")); //$NON-NLS-1$//$NON-NLS-0$
 			var msgContainer = document.getElementById('messageContainer'); //$NON-NLS-0$
 			var msgLabel = document.getElementById('messageLabel'); //$NON-NLS-0$
+			var msgText = document.getElementById('messageText'); //$NON-NLS-0$
+			var msgButton = document.getElementById('messageButton');
 			var page1;
 			var page2;
 			var page3;
 			var commonPane;
-			var target;
+			var _clouds;
+			var _defaultTarget;
+			var cloudsDropdown;
 			var orgsDropdown;
 			var spacesDropdown;
 			var appsInput;
@@ -54,20 +57,58 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 			}
 			var manifestContents = {applications: [{}]};
 			var manifestInfo = {};
+			
+			function parseMessage(msg){
+				var chunks, msgNode;
+				try {
+					chunks = URLUtil.detectValidURL(msg);
+				} catch (e) {
+					// Contained a corrupt URL
+					chunks = [];
+				}
+				if (chunks.length) {
+					msgNode = document.createDocumentFragment();
+					URLUtil.processURLSegments(msgNode, chunks);
+					// All status links open in new window
+					Array.prototype.forEach.call(lib.$$("a", msgNode), function(link) { //$NON-NLS-0$
+						link.target = "_blank"; //$NON-NLS-0$
+					});
+				}
+				return msgNode || document.createTextNode(msg);
+			}
 
 			function showMessage(message){
-				msgLabel.appendChild(document.createTextNode(message));
+				msgLabel.classList.remove("errorMessage");
+				msgContainer.classList.remove("errorMessage");
+				lib.empty(msgText);
+				msgText.style.width = "100%";
+				msgText.appendChild(parseMessage(message));
+				msgButton.className = "";
+				msgContainer.classList.add("showing"); //$NON-NLS-0$
+			}
+			
+			function showError(message){
+				msgLabel.classList.add("errorMessage");
+				msgContainer.classList.add("errorMessage");
+				lib.empty(msgText);
+				msgText.style.width = "calc(100% - 10px)";
+				msgText.appendChild(parseMessage(message.Message || message));
+				lib.empty(msgButton);
+				msgButton.className = "dismissButton core-sprite-close imageSprite";
+				msgButton.onclick = hideMessage;
 				msgContainer.classList.add("showing"); //$NON-NLS-0$
 			}
 			
 			function hideMessage(){
-				lib.empty(msgLabel);
+				msgLabel.classList.remove("errorMessage");
+				msgContainer.classList.remove("errorMessage");
+				lib.empty(msgText);
 				msgContainer.classList.remove("showing"); //$NON-NLS-0$
 			}
 			
 			var selection;
 			
-			showMessage("Loading deployment settings...");
+//			showMessage("Loading deployment settings...");
 			
 			// register hacked pref service
 			
@@ -123,6 +164,8 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 			// we read settings and wait for the plugin registry to fully startup before continuing
 			var preferences = new Preferences.PreferencesService(serviceRegistry);
 			
+			var fileClient = new mFileClient.FileClient(serviceRegistry);
+			
 			// cancel button
 			var closeFrame = function() {
 				 window.parent.postMessage(JSON.stringify({pageService: "orion.page.delegatedUI", 
@@ -141,7 +184,11 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 					manifestContents.applications[0].host = results.host;
 				}
 				if(results.services){
-					manifestContents.applications[0].services = results.services;
+					if(results.services.length === 0){
+						delete manifestContents.applications[0].services;
+					} else {
+						manifestContents.applications[0].services = results.services;
+					}
 				}
 				if(typeof results.command === "string"){
 					if(results.command){
@@ -210,32 +257,9 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 						
 						cFService.pushApp(selection, null, decodeURIComponent(deployResourceJSON.ContentLocation + deployResourceJSON.AppPath), manifest, saveManifestCheckbox.checked).then(
 							function(result){
-								var appName = result.App.name || result.App.entity.name;
-								var host = (result.Route !== undefined ? (result.Route.host || result.Route.entity.host) : undefined);
-								var launchConfName = appName + " on " + result.Target.Space.Name + " / " + result.Target.Org.Name;
-								postMsg({
-									CheckState: true,
-									ToSave: {
-										ConfigurationName: launchConfName,
-										Parameters: {
-											Target: {
-												Url: result.Target.Url,
-												Org: result.Target.Org.Name,
-												Space: result.Target.Space.Name
-											},
-											Name: appName,
-											Timeout: (result.Timeout !== undefined) ? result.Timeout : undefined
-										},
-										Url: (result.Route !== undefined) ? "http://" + host + "." + result.Domain : undefined,
-										UrlTitle: (result.Route !== undefined) ? appName : undefined,
-										Type: "Cloud Foundry",
-										ManageUrl: result.ManageUrl,
-										Path: deployResourceJSON.AppPath
-									},
-									Message: "See Manual Deployment Information in the [root folder page](" + editLocation.href + ") to view and manage [" + launchConfName + "](" + result.ManageUrl + ")"
-								});
+								postMsg(mCfUtil.prepareLaunchConfigurationContent(result, deployResourceJSON.AppPath, editLocation));
 							}, function(error){
-								postError(error);
+								handleError(error, selection, true);
 							}
 						);
 					}
@@ -302,6 +326,10 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 		    
 		    page1 = new Wizard.WizardPage({
 		    	template: "<table class=\"formTable\">"+
+			    	"<tr>"+
+						"<td id=\"cloudsLabel\" class=\"label\"></td>"+
+						"<td id=\"clouds\" class=\"selectCell\"></td>"+
+					"</tr>"+
 					"<tr>"+
 						"<td id=\"orgsLabel\" class=\"label\"></td>"+
 						"<td id=\"orgs\" class=\"selectCell\"></td>"+
@@ -318,188 +346,223 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 						"<td id=\"hostLabel\" class=\"label\"></td>"+
 						"<td id=\"host\" class=\"selectCell\"></td>"+
 					"</tr>"+
-			"</table>",
+				"</table>",
 				render: function(){
 					this.wizard.validate();
-					cloudManageUrl = target.ManageUrl;
-					cFService.getOrgs(target).then(
-						function(result2){
-							hideMessage();
-							
-							document.getElementById("orgsLabel").appendChild(document.createTextNode("Organization*:"));
-		
-							orgsDropdown = document.createElement("select");
-							result2.Orgs.forEach(function(org){
-								var option = document.createElement("option");
-								option.appendChild(document.createTextNode(org.Name));
-								option.org = org;
-								orgsDropdown.appendChild(option);
-							});
-							
-							orgsDropdown.onchange = function(event){
-								var selectedOrg = event.target.value;
-								loadTargets(selectedOrg);
-							};
-							
-							document.getElementById("orgs").appendChild(orgsDropdown);
-																
-							var targets = {};
-							result2.Orgs.forEach(function(org){
-								targets[org.Name] = [];
-								if (org.Spaces)
-									org.Spaces.forEach(function(space){
-										var newTarget = {};
-										newTarget.Url = target.Url;
-										if (cloudManageUrl)
-											newTarget.ManageUrl = cloudManageUrl;
-										newTarget.Org = org.Name;
-										newTarget.Space = space.Name;
-										targets[org.Name].push(newTarget);
-									});
-							});
-							
-							selection = new mSelection.Selection(serviceRegistry, "orion.Spaces.selection"); //$NON-NLS-0$
-							selection.addEventListener("selectionChanged", function(){this.validate();}.bind(this.wizard));
-		
-								document.getElementById("spacesLabel").appendChild(document.createTextNode("Space*:"));
-		
-								spacesDropdown = document.createElement("select");
-								
-								function setSelection(){
-									if(!spacesDropdown.value){
-										selection.setSelections();
-									} else {
-										var orgTargets = targets[orgsDropdown.value];
-										if(!orgTargets){
-											selection.setSelections();
-										} else {
-											for(var i=0; i<orgTargets.length; i++){
-												if(orgTargets[i].Space == spacesDropdown.value){
-													selection.setSelections(orgTargets[i]);
-													break;
-												}
-											}
-										}
+
+					var targets = {};
+					
+					// clouds field
+					if (_clouds.length > 1){
+						document.getElementById("cloudsLabel").appendChild(document.createTextNode("Target*:"));
+						cloudsDropdown = document.createElement("select");
+						_clouds.forEach(function(cloud){
+							var option = document.createElement("option");
+							option.appendChild(document.createTextNode(cloud.Name || cloud.Url));
+							option.cloud = cloud;
+							if (_defaultTarget && _defaultTarget.Url === cloud.Url)
+								option.selected = "selected";
+							cloudsDropdown.appendChild(option);
+						});
+						cloudsDropdown.onchange = function(event){
+							lib.empty(orgsDropdown);
+							lib.empty(spacesDropdown);
+							setSelection();
+							var selectedCloud = _clouds[event.target.selectedIndex];
+							loadTargets(selectedCloud);
+						};
+						document.getElementById("clouds").appendChild(cloudsDropdown);
+					} else {
+						document.getElementById("cloudsLabel").appendChild(document.createTextNode("Target:"));
+						document.getElementById("clouds").appendChild(document.createTextNode(_clouds[0].Name || _clouds[0].Url));
+					}
+
+					// orgs field
+					document.getElementById("orgsLabel").appendChild(document.createTextNode("Organization*:"));
+					orgsDropdown = document.createElement("select");
+					orgsDropdown.onchange = function(event){
+						var selectedOrg = event.target.value;
+						loadSpaces(selectedOrg);
+					};
+					document.getElementById("orgs").appendChild(orgsDropdown);
+					
+					// spaces field
+					selection = new mSelection.Selection(serviceRegistry, "orion.Spaces.selection"); //$NON-NLS-0$
+					selection.addEventListener("selectionChanged", function(){this.validate();}.bind(this.wizard));
+					
+					document.getElementById("spacesLabel").appendChild(document.createTextNode("Space*:"));
+					spacesDropdown = document.createElement("select");
+					spacesDropdown.onchange = function(event){
+						setSelection();
+						selection.getSelection(
+							function(selection) {
+								loadApplications(selection);
+								loadHosts(selection);
+							}
+						);
+					};
+					document.getElementById("spaces").appendChild(spacesDropdown);
+					
+					function setSelection(){
+						if(!spacesDropdown.value){
+							selection.setSelections();
+						} else {
+							var orgTargets = targets[orgsDropdown.value];
+							if(!orgTargets){
+								selection.setSelections();
+							} else {
+								for(var i=0; i<orgTargets.length; i++){
+									if(orgTargets[i].Space == spacesDropdown.value){
+										selection.setSelections(orgTargets[i]);
+										break;
 									}
 								}
-								
-								spacesDropdown.onchange = function(event){
-									setSelection();
-									selection.getSelection(
-										function(selection) {
-											loadApplications(selection);
-											loadHosts(selection);
-										});
-								};
-																						
-								document.getElementById("spaces").appendChild(spacesDropdown);
-							
-							function loadTargets(org){
-								
-								var targetsToDisplay = targets[org];
-								lib.empty(spacesDropdown);
-								targetsToDisplay.forEach(function(target){
-									var option = document.createElement("option");
-									option.appendChild(document.createTextNode(target.Space));
-									option.target = target;
-									spacesDropdown.appendChild(option);
-								});
-								setSelection();
-								selection.getSelection(
-									function(selection) {
-										loadApplications(selection);
-										loadHosts(selection);
-									});
 							}
-							
-							var appsList = [];
-							var appsDeferred;
-							function loadApplications(target){
-								appsDeferred = cFService.getApps(target);
-								appsDeferred.then(function(apps){
-									appsList = [];
-									if(apps.Apps){
-										apps.Apps.forEach(function(app){
-											appsList.push(app.Name);
-										});
-									}
-								}.bind(this));
-							}
-							
-							var routesList = [];
-							var routesDeferred;
-							function loadHosts(target){
-								routesDeferred = cFService.getRoutes(target);
-								routesDeferred.then(function(routes){
-									if(routes.Routes){
-										routesList = [];
-										routes.Routes.forEach(function(route){
-											routesList.push(route.Host);
-										});
-									}
-								}.bind(this));							
-							}
-							
-							document.getElementById("nameLabel").appendChild(document.createTextNode("Application Name*:"));
-							
-							appsDropdown = new ComboTextInput({
-								id: "applicationNameTextInput", //$NON-NLS-0$
-								parentNode: document.getElementById("name"),
-								insertBeforeNode: this._replaceWrapper,
-								hasButton: false,
-								hasInputCompletion: true,
-								serviceRegistry: this._serviceRegistry,
-								defaultRecentEntryProposalProvider: function(onItem){
-									appsDeferred.then(function(){
-										var ret = [];
-										appsList.forEach(function(app){
-											if(!app) return;
-											ret.push({type: "proposal", label: app, value: app});
-										});
-										onItem(ret);									
-									}.bind(this));
-								}
-							});
-							
-							appsInput= appsDropdown.getTextInputNode();						
-							appsInput.onkeyup = function(){this.validate();}.bind(this.wizard);
-							appsInput.addEventListener("focus",function(){this.validate();}.bind(this.wizard));
-							
-							if(manifestInfo.name){
-								appsInput.value = manifestInfo.name;
-							}
-							
-							document.getElementById("hostLabel").appendChild(document.createTextNode("Host:"));
-							
-							
-							hostDropdown = new ComboTextInput({
-								id: "applicationRouteTextInput", //$NON-NLS-0$
-								parentNode: document.getElementById("host"),
-								insertBeforeNode: this._replaceWrapper,
-								hasButton: false,
-								hasInputCompletion: true,
-								serviceRegistry: this._serviceRegistry,
-								defaultRecentEntryProposalProvider: function(onItem){
-									routesDeferred.then(function(){
-										var ret = [];
-										routesList.forEach(function(route){
-											if(!route) return;
-											ret.push({type: "proposal", label: route, value: route});
-										});
-										onItem(ret);
-									}.bind(this));
-								}
-							});
-							
-							hostInput = hostDropdown.getTextInputNode();
-							hostInput.value = manifestInfo.host || manifestInfo.name || "";
-							
-							loadTargets(orgsDropdown.value);
-							
-						}.bind(this), function(error){
-							postError(error);
 						}
-					);
+					}
+
+					function loadTargets(target){
+						showMessage("Loading deployment settings...");
+						cFService.getOrgs(target).then(
+							function(orgs){
+								lib.empty(orgsDropdown);
+								orgs.Orgs.forEach(function(org){
+									var option = document.createElement("option");
+									option.appendChild(document.createTextNode(org.Name));
+									option.org = org;
+									if (_defaultTarget && _defaultTarget.OrgId === org.Guid)
+										option.selected = "selected";
+									orgsDropdown.appendChild(option);
+									
+									targets[org.Name] = [];
+									if (org.Spaces){
+										org.Spaces.forEach(function(space){
+											var newTarget = {};
+											newTarget.Url = target.Url;
+											if (target.ManageUrl)
+												newTarget.ManageUrl = target.ManageUrl;
+											newTarget.Org = org.Name;
+											newTarget.Space = space.Name;
+											newTarget.SpaceId = space.Guid;
+											targets[org.Name].push(newTarget);
+										});
+									}
+								});
+
+								loadSpaces(orgsDropdown.value);
+								hideMessage();
+							}, function(error){
+								handleError(error, target, false, function(){loadTargets(target);});
+							}
+						);
+					}
+					
+					function loadSpaces(org){
+						var targetsToDisplay = targets[org];
+						lib.empty(spacesDropdown);
+						targetsToDisplay.forEach(function(target){
+							var option = document.createElement("option");
+							option.appendChild(document.createTextNode(target.Space));
+							option.target = target;
+							if (_defaultTarget && _defaultTarget.SpaceId === target.SpaceId)
+								option.selected = "selected";
+							spacesDropdown.appendChild(option);
+						});
+						setSelection();
+						selection.getSelection(
+							function(selection) {
+								loadApplications(selection);
+								loadHosts(selection);
+							});
+					}
+					
+					var appsList = [];
+					var appsDeferred;
+					
+					function loadApplications(target){
+						appsDeferred = cFService.getApps(target);
+						appsDeferred.then(function(apps){
+							appsList = [];
+							if(apps.Apps){
+								apps.Apps.forEach(function(app){
+									appsList.push(app.Name);
+								});
+							}
+						}.bind(this));
+					}
+					
+					var routesList = [];
+					var routesDeferred;
+					
+					function loadHosts(target){
+						routesDeferred = cFService.getRoutes(target);
+						routesDeferred.then(function(routes){
+							if(routes.Routes){
+								routesList = [];
+								routes.Routes.forEach(function(route){
+									routesList.push(route.Host);
+								});
+							}
+						}.bind(this));							
+					}
+					
+					document.getElementById("nameLabel").appendChild(document.createTextNode("Application Name*:"));
+					
+					appsDropdown = new ComboTextInput({
+						id: "applicationNameTextInput", //$NON-NLS-0$
+						parentNode: document.getElementById("name"),
+						insertBeforeNode: this._replaceWrapper,
+						hasButton: false,
+						hasInputCompletion: true,
+						serviceRegistry: this._serviceRegistry,
+						onRecentEntryDelete: null,
+						defaultRecentEntryProposalProvider: function(onItem){
+							appsDeferred.then(function(){
+								var ret = [];
+								appsList.forEach(function(app){
+									if(!app) return;
+									ret.push({type: "proposal", label: app, value: app});
+								});
+								onItem(ret);									
+							}.bind(this));
+						}
+					});
+					
+					appsInput= appsDropdown.getTextInputNode();						
+					appsInput.onkeyup = function(){this.validate();}.bind(this.wizard);
+					appsInput.addEventListener("focus",function(){this.validate();}.bind(this.wizard));
+					
+					if(manifestInfo.name){
+						appsInput.value = manifestInfo.name;
+					}
+					
+					document.getElementById("hostLabel").appendChild(document.createTextNode("Host:"));
+					
+					hostDropdown = new ComboTextInput({
+						id: "applicationRouteTextInput", //$NON-NLS-0$
+						parentNode: document.getElementById("host"),
+						insertBeforeNode: this._replaceWrapper,
+						hasButton: false,
+						hasInputCompletion: true,
+						serviceRegistry: this._serviceRegistry,
+						onRecentEntryDelete: null,
+						defaultRecentEntryProposalProvider: function(onItem){
+							routesDeferred.then(function(){
+								var ret = [];
+								routesList.forEach(function(route){
+									if(!route) return;
+									ret.push({type: "proposal", label: route, value: route});
+								});
+								onItem(ret);
+							}.bind(this));
+						}
+					});
+					
+					hostInput = hostDropdown.getTextInputNode();
+					hostInput.value = manifestInfo.host || manifestInfo.name || "";
+					
+					var selectedCloud = _clouds[_clouds.length > 1 ? cloudsDropdown.selectedIndex : 0];
+					loadTargets(selectedCloud);
 			    },
 			    validate: function(setValid) {
 					if(!selection){
@@ -619,29 +682,33 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 	    		}
 	    		
 	    		showMessage("Loading services...");
-		    	cFService.getServices(target).then(function(servicesResp){
-		    		hideMessage();
-		    		var servicesToChooseFrom = [];
-		    		
-					if(servicesResp.Children){
-						servicesResp.Children.forEach(function(service){
-							if(services && services.some(function(manService){return manService === service.Name;})){
-								
-							} else {
-								servicesToChooseFrom.push(service.Name);
-							}
-						});
-					}
-						
-		    		servicesToChooseFrom.forEach(function(serviceName){
-						var serviceOption = document.createElement("option");
-						serviceOption.appendChild(document.createTextNode(serviceName));
-						serviceOption.service = serviceName;
-						serviceOption.id = "service_" + serviceName;
-						servicesDropdown.appendChild(serviceOption);
-		    		});
-		    		
-		    	}.bind(this), postError);
+		    	cFService.getServices(selection.getSelection()).then(
+		    		function(servicesResp){
+			    		hideMessage();
+			    		var servicesToChooseFrom = [];
+			    		
+						if(servicesResp.Children){
+							servicesResp.Children.forEach(function(service){
+								if(services && services.some(function(manService){return manService === service.Name;})){
+									
+								} else {
+									servicesToChooseFrom.push(service.Name);
+								}
+							});
+						}
+							
+			    		servicesToChooseFrom.forEach(function(serviceName){
+							var serviceOption = document.createElement("option");
+							serviceOption.appendChild(document.createTextNode(serviceName));
+							serviceOption.service = serviceName;
+							serviceOption.id = "service_" + serviceName;
+							servicesDropdown.appendChild(serviceOption);
+			    		});
+		    		}.bind(this), 
+		    		function(error){
+		    			handleError(error, selection.getSelection());
+		    		}.bind(this)
+		    	);
 		    },
 		    getResults: function(){
 		    	var ret = {};
@@ -775,9 +842,10 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 
 		    //
 		    function loadScreen(){
-				getTarget(cFService, preferences).then(
-					function(targetResp){
-						target = targetResp;
+				Deferred.all([getTargets(cFService, preferences), getDefaultTarget(fileClient, deployResourceJSON)]).then(
+					function(results){
+						_clouds = results[0];
+						_defaultTarget = results[1];
 						var wizard = new Wizard.Wizard({
 							parent: "wizard",
 							pages: [page1, page2, page3],
@@ -785,35 +853,29 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 							onSubmit: doAction,
 							onCancel: closeFrame,
 							buttonNames: {ok: "Deploy"},
-							size: {width: "370px", height: "180px"}
+							size: {width: "420px", height: "180px"}
 						});
 					}, function(error){
-						postError(error);
+						handleError(error, null, true);
 					}
 				);
 			}
 			
-			cFService.getManifestInfo(relativeFilePath).then(function(manifestResponse){
-				if(manifestResponse.Type === "Manifest" && manifestResponse.Contents && manifestResponse.Contents.applications && manifestResponse.Contents.applications.length > 0){				
-					manifestContents = manifestResponse.Contents;
-			    	manifestInfo = manifestResponse.Contents.applications[0];
-				}
-		    	loadScreen();
-		    }.bind(this), loadScreen);
-			
-		}
-	);
-	
-	function getTarget(cFService, preferences) {
-		var deferred = new Deferred();
-		mCfUtil.getTargets(preferences).then(
-			function(targets){
-				deferred.resolve(targets[0]);
-			}, function(error){
-				deferred.reject(error);
-			}
+				function getDefaultTarget(fileClient, deployResourceJSON) {
+		var clientDeferred = new Deferred();
+		fileClient.read(deployResourceJSON.ContentLocation, true).then(
+			function(result){
+				mCfUtil.getDefaultTarget(result).then(
+					clientDeferred.resolve,
+					clientDeferred.reject
+				);
+			}, clientDeferred.reject
 		);
-		return deferred;
+		return clientDeferred;
+	}
+	
+	function getTargets(cFService, preferences) {
+		return mCfUtil.getTargets(preferences);
 	}
 
 	function postMsg(status) {
@@ -822,7 +884,8 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 			 status: status}), "*");
 	}
 	
-	function postError(error) {
+	function handleError(error, target, post, retryFunc) {
+		error.Severity = "Error";
 		if(error.Message){
 			if (error.Message.indexOf("The host is taken")===0){
 				error.Message = "The host is already in use by another application. Please check the host/domain in the manifest file.";
@@ -832,28 +895,110 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 		if (error.HttpCode === 404){
 			error = {
 				State: "NOT_DEPLOYED",
-				Message: error.Message
+				Message: error.Message,
+				Severity: "Error"
 			};
 		} else if (error.JsonData && error.JsonData.error_code) {
 			var err = error.JsonData;
 			if (err.error_code === "CF-InvalidAuthToken" || err.error_code === "CF-NotAuthenticated"){
 				error.Retry = {
-					parameters: [{id: "user", type: "text", name: "ID:"}, {id: "password", type: "password", name: "Password:"}]
+					parameters: [{id: "user", type: "text", name: "ID:"}, {id: "password", type: "password", name: "Password:"}, {id: "url", hidden: true, value: target.Url}]
 				};
 				
 				error.forceShowMessage = true;
 				error.Severity = "Info";
-				error.Message = mCfUtil.getLoginMessage(cloudManageUrl);				
+				error.Message = mCfUtil.getLoginMessage(target.ManageUrl);
 			
 			} else if (err.error_code === "CF-TargetNotSet"){
 				var cloudSettingsPageUrl = new URITemplate("{+OrionHome}/settings/settings.html#,category=cloud").expand({OrionHome : PageLinks.getOrionHome()});
 				error.Message = "Set up your Cloud. Go to [Settings](" + cloudSettingsPageUrl + ")."; 
 			}
 		}
-		
-		window.parent.postMessage(JSON.stringify({pageService: "orion.page.delegatedUI", 
-			 source: "org.eclipse.orion.client.cf.deploy.uritemplate", 
-			 status: error}), "*");
+		if(post){
+			window.parent.postMessage(JSON.stringify({pageService: "orion.page.delegatedUI", 
+				 source: "org.eclipse.orion.client.cf.deploy.uritemplate", 
+				 status: error}), "*");
+		} else {
+			showError(error);
+			
+			if(error.Retry && error.Retry.parameters){
+				var fields = document.createElement("div");
+				var paramInputs = {};
+				function submitParams(){
+					var params = {};
+					for(var i=0; i<error.Retry.parameters.length; i++){
+						var param = error.Retry.parameters[i];
+						if(param.hidden){
+							params[param.id] = param.value;
+						} else {
+							params[param.id] = paramInputs[param.id].value;
+						}
+					}
+					if(params.url && params.user && params.password){
+						showMessage("Logging in to " + params.url + "...");
+						cFService.login(params.url, params.user, params.password).then(function(result){
+							hideMessage();
+							if(retryFunc){
+								retryFunc(result);
+							}
+						}, function(newError){
+							hideMessage();
+							if(newError.HttpCode === 401){
+								handleError(error, target, post, retryFunc);
+							} else {
+								handleError(newError, target, post, retryFunc);
+							}
+						});
+					}
+				}
+				fields.className = "retryFields";
+				var firstField;
+				for(var i=0; i<error.Retry.parameters.length; i++){
+					var param = error.Retry.parameters[i];
+					if(param.hidden){
+						continue;
+					}
+					var div = document.createElement("div");
+					var label = document.createElement("label");
+					label.appendChild(document.createTextNode(param.name));
+					var input = document.createElement("input");
+					if(i===0){
+						firstField = input;
+					}
+					input.type = param.type;
+					input.id = param.id;
+					input.onkeydown = function(event){
+						if(event.keyCode === 13){
+							submitParams();
+						} else if(event.keyCode === 27) {
+							hideMessage();
+						}
+					}
+					paramInputs[param.id] = input;
+					div.appendChild(label);
+					div.appendChild(input);
+					fields.appendChild(div);
+				}
+				var submitButton = document.createElement("button");
+				submitButton.appendChild(document.createTextNode("Submit"));
+				submitButton.onclick = submitParams;
+				fields.appendChild(submitButton);
+				msgText.appendChild(fields);
+				if(firstField){
+					firstField.focus();
+				}
+			}
+		}
 	}
-
+		    
+			cFService.getManifestInfo(relativeFilePath).then(function(manifestResponse){
+				if(manifestResponse.Type === "Manifest" && manifestResponse.Contents && manifestResponse.Contents.applications && manifestResponse.Contents.applications.length > 0){				
+					manifestContents = manifestResponse.Contents;
+			    	manifestInfo = manifestResponse.Contents.applications[0];
+				}
+		    	loadScreen();
+		    }.bind(this), loadScreen);
+		}
+	);
+	
 });

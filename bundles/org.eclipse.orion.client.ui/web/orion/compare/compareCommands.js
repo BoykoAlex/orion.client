@@ -11,8 +11,8 @@
  *******************************************************************************/
 /*eslint-env browser, amd*/
 
-define(['i18n!orion/compare/nls/messages', 'orion/commands', 'orion/keyBinding', 'orion/webui/littlelib', 'orion/EventTarget'], 
-function(messages, mCommands, mKeyBinding, lib, EventTarget) {
+define(['i18n!orion/compare/nls/messages', 'orion/commands', 'orion/Deferred', 'orion/keyBinding', 'orion/webui/littlelib', 'orion/EventTarget'], 
+function(messages, mCommands, Deferred, mKeyBinding, lib, EventTarget) {
 
 var exports = {};
 /**
@@ -51,8 +51,8 @@ exports.CompareCommandFactory = (function() {
 				return;
 			}
 			var copyToLeftCommand = new mCommands.Command({
-				name : messages["Copy current change from right to left"],
-				tooltip : messages["Copy current change from right to left"],
+				name : messages["CpCurChangeRightToLeft"],
+				tooltip : messages["CpCurChangeRightToLeft"],
 				imageClass : "core-sprite-leftarrow", //$NON-NLS-0$
 				id: "orion.compare.copyToLeft", //$NON-NLS-0$
 				groupId: "orion.compareGroup", //$NON-NLS-0$
@@ -63,8 +63,8 @@ exports.CompareCommandFactory = (function() {
 					data.items.copyToLeft();
 			}});
 			var copyToRightCommand = new mCommands.Command({
-				name : messages["Copy current change from left to right"],
-				tooltip : messages["Copy current change from left to right"],
+				name : messages["CpCurChangeLeftToRight"],
+				tooltip : messages["CpCurChangeLeftToRight"],
 				imageClass : "core-sprite-rightarrow", //$NON-NLS-0$
 				id: "orion.compare.copyToRight", //$NON-NLS-0$
 				groupId: "orion.compareGroup", //$NON-NLS-0$
@@ -86,7 +86,18 @@ exports.CompareCommandFactory = (function() {
 					ignoreWhitespaceCommand.checked = isWhitespaceIgnored;
 					ignoreWhitespaceCommand.name = isWhitespaceIgnored ? messages["UseWhitespace"] : messages["IgnoreWhitespace"];
 					ignoreWhitespaceCommand.tooltip = isWhitespaceIgnored ? messages["UseWhitespaceTooltip"] :  messages["IgnoreWhitespaceTooltip"];
-					return !item.options.diffContent/* && !item.isWhitespaceIgnored()*/;
+					return true;
+				},
+				preCallback: function(data) {
+					var widget = data.handler.getWidget();
+					if(typeof widget.options.onSave === "function" && widget.isDirty()) { //$NON-NLS-0$
+						var doSave = window.confirm(messages.confirmUnsavedChanges);
+						if(!doSave) {
+							return new Deferred().resolve();
+						}
+						return widget.options.onSave(doSave);
+					}
+					return new Deferred().resolve(true);
 				},
 				callback : function(data) {
 					data.items.ignoreWhitespace(ignoreWhitespaceCommand.checked);
@@ -109,9 +120,20 @@ exports.CompareCommandFactory = (function() {
 					toggleInline2WayCommand.tooltip = is2Way ? messages["Switch to unified diff"] :  messages["Switch to side by side diff"];
 					return true;
 				},
+				preCallback: function(data) {
+					var widget = data.handler.getWidget();
+					if(typeof widget.options.onSave === "function" && widget.isDirty()) { //$NON-NLS-0$
+						var doSave = window.confirm(messages.confirmUnsavedChanges);
+						if(!doSave) {
+							return new Deferred().resolve();
+						}
+						return widget.options.onSave(doSave);
+					}
+					return new Deferred().resolve(true);
+				},
 				callback : function(data) {
+					this.dispatchEvent({type:"compareConfigChanged", name: "mode", value: data.items.options.toggler.getWidget().type === "twoWay" ? "inline" : "twoWay"}); //$NON-NLS-0$
 					data.items.options.toggler.toggle();
-					this.dispatchEvent({type:"compareConfigChanged", name: "mode", value: data.items.options.toggler.getWidget().type}); //$NON-NLS-0$
 			}.bind(this)});
 			var nextDiffCommand = new mCommands.Command({
 				name: messages["Next diff block"],

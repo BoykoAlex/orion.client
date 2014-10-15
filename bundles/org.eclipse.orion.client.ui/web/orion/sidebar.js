@@ -16,8 +16,9 @@ define(['orion/objects', 'orion/commands', 'orion/outliner', 'orion/webui/little
 		'orion/globalCommands',
 		'i18n!orion/edit/nls/messages',
 		'orion/search/InlineSearchPane',
-		'orion/keyBinding'],
-		function(objects, mCommands, mOutliner, lib, MiniNavViewMode, ProjectNavViewMode, mGlobalCommands, messages, InlineSearchPane, mKeyBinding) {
+		'orion/keyBinding',
+		'orion/webui/Slideout'],
+		function(objects, mCommands, mOutliner, lib, MiniNavViewMode, ProjectNavViewMode, mGlobalCommands, messages, InlineSearchPane, mKeyBinding, mSlideout) {
 
 	/**
 	 * @name orion.sidebar.Sidebar
@@ -123,10 +124,24 @@ define(['orion/objects', 'orion/commands', 'orion/outliner', 'orion/webui/little
 				toolbarNode: toolbarNode,
 				sidebar: this
 			});
-
+			
+			this._slideout = new mSlideout.Slideout(this.toolbarNode.parentNode);
+			
+			// add Slideout menu group to View menu
+			commandRegistry.addCommandGroup(switcherNode.id, 
+				"orion.slideoutMenuGroup", //$NON-NLS-0$
+				3, 
+				messages["Slideout"], //$NON-NLS-0$
+				"orion.menuBarViewGroup", //$NON-NLS-0$
+				null, 
+				null, 
+				null, 
+				"dropdownSelection"); //$NON-NLS-0$
+			
+			
 			// Outliner is responsible for adding its view mode(s) to this sidebar
-			this.outliner = new mOutliner.Outliner({
-				parent: parentNode,
+			this.outliner = new mOutliner.Outliner(this._slideout,
+			{
 				toolbar: toolbarNode,
 				serviceRegistry: serviceRegistry,
 				contentTypeRegistry: contentTypeRegistry,
@@ -136,7 +151,8 @@ define(['orion/objects', 'orion/commands', 'orion/outliner', 'orion/webui/little
 				selectionService: selection,
 				inputManager: editorInputManager,
 				progressService: progressService,
-				sidebar: this
+				sidebar: this,
+				switcherNode: switcherNode
 			});
 			this.setViewMode(this.defaultViewMode);
 			
@@ -225,8 +241,8 @@ define(['orion/objects', 'orion/commands', 'orion/outliner', 'orion/webui/little
 			this.commandRegistry.renderCommands(switcher.id, switcher, null, this, "button"); //$NON-NLS-0$
 		},
 		_createInlineSearchPane: function() {
-			this._inlineSearchPane = new InlineSearchPane({
-				parentNode: this.toolbarNode.parentNode,
+			this._inlineSearchPane = new InlineSearchPane(this._slideout,
+			{
 				serviceRegistry: this.serviceRegistry,
 				commandRegistry: this.commandRegistry,
 				fileClient: this.fileClient,

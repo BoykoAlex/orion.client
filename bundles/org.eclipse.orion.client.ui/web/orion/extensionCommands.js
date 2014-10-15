@@ -300,7 +300,22 @@ define(["orion/Deferred", "orion/commands", "orion/contentTypes", "orion/URITemp
 					}
 				}
 			}
-			// now content types
+			
+			// Check content type validation
+			if (!validator.info.contentType && !validator.info.excludedContentTypes){
+				// Validation doesn't care about content type
+				return true;
+			}
+			
+			// Directories don't match any content types except */*
+			if (item.Directory) {
+				// */* is a special case used by openWithCommand that applies to directories (Bug 445677)
+				if (validator.info.contentType && validator.info.contentType.indexOf('*/*') >= 0){
+					return true;
+				}
+				return false;
+			}
+			
 			var showCommand = true;
 			var contentType = contentTypes ? mContentTypes.getFilenameContentType(item.Name, contentTypes) : null;
 			contentType = contentType || {

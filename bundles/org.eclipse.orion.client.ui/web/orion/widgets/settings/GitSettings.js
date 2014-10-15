@@ -27,15 +27,6 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 						'<div id="userCommands" class="layoutRight sectionActions"></div>' +
 					'</div>' + //$NON-NLS-2$ //$NON-NLS-0$
 					'<div class="sections sectionTable">' + //$NON-NLS-0$
-					
-					'</div>' + //$NON-NLS-0$
-					
-					'<div class="sectionWrapper toolComposite">' +
-						'<div class="sectionAnchor sectionTitle layoutLeft">${Git Credentials Storage}</div>' + 
-						'<div id="gitCommands" class="layoutRight sectionActions"></div>' +
-					'</div>' + //$NON-NLS-2$ //$NON-NLS-0$
-					'<div class="gitSections sectionTable">' + //$NON-NLS-0$
-					
 					'</div>', //$NON-NLS-0$
 
 		createElements: function() {
@@ -43,7 +34,6 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 			lib.processTextNodes(this.node, messages);
 			
 			this.sections = lib.$('.sections', this.node);
-			this.gitSections = lib.$('.gitSections', this.node);
 			
 			this.createSections();
 		},
@@ -83,7 +73,7 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 			];
 			var gitSection = new Subsection( {sectionName:messages["Git Config"], parentNode: this.sections, children: this.gitFields } );
 			gitSection.show();
-						
+			
 			//--------- git credentials -------------------------------
 			this.gitCredentialsFields = [ new LabeledCheckbox( 
 				{	fieldlabel:messages["Enable Storage"], 
@@ -106,7 +96,7 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 					var gitPreferenceStorage = new GitPreferenceStorage(that.registry);
 					gitPreferenceStorage.remove(repository).then(
 						function(){
-							messageService.setProgressResult(i18nUtil.formatMessage(messages["Deleted git credentials for ${0}"], [repository]));
+							messageService.setProgressResult(i18nUtil.formatMessage(messages["DeletedGitMsg"], [repository]));
 							that.gitCredentialsFields[keyIndex+1].destroy();
 						}
 					);
@@ -126,7 +116,7 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 						that.gitCredentialsFields.push(labeledCommand);
 					}
 					
-					gitCredentialsSection = new Subsection( {sectionName:"", parentNode: that.gitSections, children: that.gitCredentialsFields} );
+					gitCredentialsSection = new Subsection( {sectionName: messages["Git Credentials Storage"], parentNode: that.sections, children: that.gitCredentialsFields} ); //$NON-NLS-0$
 					gitCredentialsSection.show();		
 				}
 			);
@@ -138,7 +128,7 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 			var messageService = this.registry.getService("orion.page.message"); //$NON-NLS-0$
 			gitConfigPreference.setConfig({GitMail: this.gitFields[0].getValue(),	GitName: this.gitFields[1].getValue()}).then(
 				function(){
-					messageService.setProgressResult( messages['Git user data successfully updated.'] );
+					messageService.setProgressResult( messages['GitUsrUpdateSuccess'] );
 				}
 			);
 		},
@@ -149,11 +139,11 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 			// git authentication update
 			var gitPreferenceStorage = new GitPreferenceStorage(this.registry);
 			if( this.gitCredentialsFields[0].isChecked() ){
-				var confirmMessage = messages["Please be aware that your credentials will be stored persistently in the browser."] + '\n' + messages["Do you wish to enable the Key Storage?"];
+				var confirmMessage = messages["BrowserCredStoreMsg"] + '\n' + messages["AskEnableKeyStorage"];
 				if(window.confirm(confirmMessage)){
 					gitPreferenceStorage.enable().then(
 						function(){
-							messageService.setProgressResult( messages['Git Credentials successfully updated.'] );
+							messageService.setProgressResult( messages['GitCredsUpdateSuccess'] );
 						}
 					);
 				} else {
@@ -163,7 +153,7 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 			} else {
 				gitPreferenceStorage.disable().then(
 					function(){
-						messageService.setProgressResult( messages['Git Credentials successfully updated.'] );
+						messageService.setProgressResult( messages['GitCredsUpdateSuccess'] );
 					}
 				);
 			}
@@ -190,7 +180,7 @@ define(['i18n!orion/settings/nls/messages', 'require', 'orion/commands', 'orion/
 		destroy: function() {
 			if (this.node) {
 				lib.empty(this.node);
-				this.node = this.sections = this.gitSections = null;
+				this.node = this.sections = null;
 			}
 		}
 	});

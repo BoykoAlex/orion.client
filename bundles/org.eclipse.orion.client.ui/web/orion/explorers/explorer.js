@@ -209,6 +209,7 @@ exports.Explorer = (function() {
 				renderer: this.renderer,
 				showRoot: options ? !!options.showRoot : false,  
 				indent: options ? options.indent: undefined,
+				preCollapse: options ? options.preCollapse: undefined,
 				onCollapse: options ? options.onCollapse: undefined,
 				navHandlerFactory: options ? options.navHandlerFactory: undefined,
 				tableElement: options ? options.tableElement : undefined,
@@ -332,7 +333,16 @@ exports.createExplorerCommands = function(commandService, visibleWhen) {
 			return isVisible(item);
 		},
 		callback : function(data) {
-			data.items.collapseAll();
+			if(typeof data.items.preCollapseAll === "function") { //$NON-NLS-0$
+				data.items.preCollapseAll().then(function (result){
+					if(!result) {
+						return;
+					}
+					data.items.collapseAll();
+				});
+			} else {
+				data.items.collapseAll();
+			}
 	}});
 	commandService.addCommand(expandAllCommand);
 	commandService.addCommand(collapseAllCommand);
@@ -836,26 +846,28 @@ exports.SelectionRenderer = (function(){
 		}
 	};
 	
+	SelectionRenderer.prototype.initSelectableRow = function(item, tableRow) {
+		var self = this;
+		tableRow.addEventListener("click", function(evt) { //$NON-NLS-0$
+			if(self.explorer.getNavHandler()){
+				self.explorer.getNavHandler().onClick(item, evt);
+			}
+		}, false);
+	};
+	
 	SelectionRenderer.prototype.renderRow = function(item, tableRow) {
 		tableRow.verticalAlign = "baseline"; //$NON-NLS-0$
 		tableRow.classList.add("treeTableRow"); //$NON-NLS-0$
 
-	
-		if (item.selectable === undefined || item.selectable) {
-			var navDict = this.explorer.getNavDict();
-			if(navDict){
-				if (this.explorer.selectionPolicy !== "cursorOnly") { //$NON-NLS-0$
-					tableRow.classList.add("selectableNavRow"); //$NON-NLS-0$
-				}
-				
-				navDict.addRow(item, tableRow);
-				var self = this;
-				tableRow.addEventListener("click", function(evt) { //$NON-NLS-0$
-					if(self.explorer.getNavHandler()){
-						self.explorer.getNavHandler().onClick(item, evt);
-					}
-				}, false);
+		var navDict = this.explorer.getNavDict();
+		if(navDict){
+			if (this.explorer.selectionPolicy !== "cursorOnly") { //$NON-NLS-0$
+				tableRow.classList.add("selectableNavRow"); //$NON-NLS-0$
 			}
+			
+			navDict.addRow(item, tableRow);
+		}
+		if (item.selectable === undefined || item.selectable) {
 			var checkColumn = this.getCheckboxColumn(item, tableRow);
 			if(checkColumn) {
 				checkColumn.classList.add('checkColumn'); //$NON-NLS-0$

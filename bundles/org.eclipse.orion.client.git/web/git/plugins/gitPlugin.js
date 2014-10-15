@@ -64,20 +64,8 @@ define([
 		uriTemplate: "{+OrionHome}/git/git-repository.html#{,GitLogLocation}?page=1",
 		forceSingleItem: true
 	});
-
-	provider.registerService("orion.navigate.command", {}, {
-		nameKey: "Git Remote",
-		id: "eclipse.git.remote",
-		tooltipKey: "Go to Git Remote",
-		nls: "git/nls/gitmessages",
-		validationProperties: [{
-			source: "Git:DefaultRemoteBranchLocation", 
-			variableName: "GitRemoteLocation"
-		}],
-		uriTemplate: "{+OrionHome}/git/git-repository.html#{,GitRemoteLocation}?page=1",
-		forceSingleItem: true
-	});
-
+	
+	
 	// orion.navigate.command for Git Repository -- applies to File objects
 	provider.registerService("orion.navigate.command", null, {
 		id: "eclipse.git.repository",
@@ -91,7 +79,7 @@ define([
 		}],
 		uriTemplate: "{+OrionHome}/git/git-repository.html#{,GitRepoLocation}"
 	});
-	
+
 	provider.registerService("orion.core.content", null, {
 		id: "orion.content.gitClone",
 		nls: "git/nls/gitmessages",
@@ -272,9 +260,14 @@ define([
 
 	var base = new URL("../../gitapi/diff/", window.location.href).href;
 	provider.registerService("orion.core.diff", {
-		getDiffContent: function(diffURI){	
+		getDiffContent: function(diffURI, options){	
 			var url = new URL(diffURI, window.location);
 			url.query.set("parts", "diff");
+			if (options && typeof options === "object") {
+				Object.keys(options).forEach(function(param) {
+					url.query.set(param, options[param]);
+				});
+			}
 			return xhr("GET", url.href, {
 				headers: {
 					"Orion-Version": "1"

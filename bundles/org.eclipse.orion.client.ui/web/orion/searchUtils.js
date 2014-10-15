@@ -62,7 +62,7 @@ searchUtils.getSearchParams = function(searcher, searchStr, advOptions){
 			return searchParams;
 		}
 	} else {
-		window.alert(messages["Can't search: no search service is available"]);
+		window.alert(messages["NoSearchAvailableErr"]);
 	}
 	
 	return null;
@@ -501,25 +501,6 @@ searchUtils.fullPathNameByMeta = function(parents){
 searchUtils.path2FolderName = function(filePath, fileName, keepTailSlash){
 	var tail = keepTailSlash ? 0: 1;
 	return filePath.substring(0, filePath.length - encodeURIComponent(fileName).length - tail);
-};
-
-searchUtils.getOpenSearchPref = function(serviceRegistry, callback){
-	serviceRegistry.getService("orion.core.preference").getPreferences("/cm/configurations").then(function(prefs) {  //$NON-NLS-1$ //$NON-NLS-0$
-		var properties = prefs.get("nav.config"); //$NON-NLS-0$
-		var openInNewTab;
-		if (properties && properties["links.newtab"] !== "undefined") { //$NON-NLS-1$ //$NON-NLS-0$
-			openInNewTab = properties["links.newtab"] ? true : false; //$NON-NLS-0$ 
-		} else {
-			openInNewTab = false;
-		}
-		callback(openInNewTab);
-	});
-};
-
-searchUtils.setOpenSearchPref = function(serviceRegistry, openInNewTab){
-	serviceRegistry.getService("orion.core.preference").getPreferences("/window/favorites").then(function(prefs) {  //$NON-NLS-1$ //$NON-NLS-0$
-		prefs.put("openSearchPref", {"openInNewTab": openInNewTab}); //$NON-NLS-1$ //$NON-NLS-0$
-	});
 };
 
 return searchUtils;

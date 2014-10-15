@@ -33,8 +33,7 @@ define([
 		var commandService = dependencies.commandService;
 		var tags = dependencies.tags;
 		var force = dependencies.force;
-		var gerrit = dependencies.gerrit;
-		
+
 		//Callbacks
 		var sshCredentialsCallback = dependencies.sshCredentialsDialogCloseCallback;
 		var sshSlideoutCallback = dependencies.sshSlideoutCloseCallback;
@@ -58,7 +57,7 @@ define([
 				
 				var confirmedWarnings = data.confirmedWarnings;
 				if(force && !confirmedWarnings){
-					if(!confirm(messages["You're going to override content of the remote branch. This can cause the remote repository to lose commits."]+"\n\n"+messages['Are you sure?'])){ //$NON-NLS-0$
+					if(!confirm(messages["OverrideContentOfRemoteBr"]+"\n\n"+messages['Are you sure?'])){ //$NON-NLS-0$
 						d.reject();
 						return;
 					} else {

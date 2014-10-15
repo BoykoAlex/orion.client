@@ -26,6 +26,7 @@ define([
 	'javascript/contentAssist/contentAssist',
 	'javascript/validator',
 	'javascript/occurrences',
+	'javascript/hover',
 	'javascript/outliner',
 	'orion/plugin',
 	'orion/util',
@@ -35,7 +36,7 @@ define([
 	'orion/editor/stylers/application_schema_json/syntax',
 	'orion/editor/stylers/application_x-ejs/syntax'
 ], function(Esprima, ASTManager, MongodbIndex, MysqlIndex, PostgresIndex, RedisIndex, ExpressIndex, AMQPIndex, ContentAssist, 
-			EslintValidator, Occurrences, Outliner,	PluginProvider, Util, GenerateDocCommand, mJS, mJSON, mJSONSchema, mEJS) {
+			EslintValidator, Occurrences, Hover, Outliner,	PluginProvider, Util, GenerateDocCommand, mJS, mJSON, mJSONSchema, mEJS) {
 
 	/**
 	 * Plug-in headers
@@ -119,6 +120,16 @@ define([
 			contentType: ["application/javascript", "text/html"]	//$NON-NLS-0$ //$NON-NLS-1$
 	});
 	
+	/**
+	 * Register the hover support
+	 */
+	provider.registerService("orion.edit.hover", new Hover.JavaScriptHover(astManager),  //$NON-NLS-0$
+		{
+		    tipTitle: 'JavaScript',
+		    name: 'JavaScript Hover Provider',
+			contentType: ["application/javascript", "text/html"]	//$NON-NLS-0$ //$NON-NLS-1$
+	});
+	
 	provider.registerService("orion.edit.contentassist", new ContentAssist.JSContentAssist(astManager),  //$NON-NLS-0$
 		{
 			contentType: ["application/javascript"],  //$NON-NLS-0$
@@ -154,7 +165,7 @@ define([
 					nls: 'javascript/nls/messages',  //$NON-NLS-0$
 					nameKey: 'eslintValidator',  //$NON-NLS-0$
 					tags: "validation javascript js eslint".split(" "),  //$NON-NLS-0$  //$NON-NLS-1$
-					category: "validation",  //$NON-NLS-0$
+					category: "javascript",  //$NON-NLS-0$
 					properties: [
 						{
 							id: "no-new-array", //$NON-NLS-0$
@@ -208,6 +219,12 @@ define([
 							defaultValue: error,
 							options: severities
 						},
+						{	id: "validate_typeof",  //$NON-NLS-0$
+							nameKey: 'validTypeof',  //$NON-NLS-0$
+							type: "number",  //$NON-NLS-0$
+							defaultValue: error,
+							options: severities
+						},
 						{	id: "validate_use_before_define",  //$NON-NLS-0$
 							nameKey: 'useBeforeDefine',  //$NON-NLS-0$
 							type: "number",  //$NON-NLS-0$
@@ -226,6 +243,12 @@ define([
 							defaultValue: error,
 							options: severities
 						},
+						{	id: "validate_missing_semi",  //$NON-NLS-0$
+							nameKey: 'missingSemi',  //$NON-NLS-0$
+							type: "number",  //$NON-NLS-0$
+							defaultValue: warning,
+							options: severities
+						},
 						{	id: "validate_throw_error",  //$NON-NLS-0$
 							nameKey: 'throwError',  //$NON-NLS-0$
 							type: "number",  //$NON-NLS-0$
@@ -242,6 +265,12 @@ define([
 							nameKey: 'docFuncExpr',  //$NON-NLS-0$
 							type: "number",  //$NON-NLS-0$
 							defaultValue: ignore,
+							options: severities
+						},
+						{	id: "validate_no_sparse_arrays",  //$NON-NLS-0$
+							nameKey: 'noSparseArrays',  //$NON-NLS-0$
+							type: "number",  //$NON-NLS-0$
+							defaultValue: warning,
 							options: severities
 						},
 						{	id: "validate_curly",  //$NON-NLS-0$

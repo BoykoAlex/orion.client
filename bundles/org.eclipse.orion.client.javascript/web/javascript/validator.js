@@ -43,7 +43,9 @@ define([
 			"use-isnan" : 2, //$NON-NLS-0$
 			'no-unreachable': 2,  //$NON-NLS-0$
 			'no-fallthrough' : 2,  //$NON-NLS-0$
-			'no-empty-block' : 0  //$NON-NLS-0$
+			'no-empty-block' : 0,  //$NON-NLS-0$
+			'valid-typeof': 2,  //$NON-NLS-0$
+			'no-sparse-arrays': 1  //$NON-NLS-0$
 		},
 		/**
 		 * @description Sets the given rule to the given enabled value
@@ -83,8 +85,7 @@ define([
 	}
 	
 	/**
-	 * @description Converts the configuration rule value to an eslint string. One of 'warning', 'error', 'ignore'
-	 * @public
+	 * @description Converts the configuration rule value to an Orion problem severity string. One of 'warning', 'error'.
 	 * @param {Object} prob The problem object
 	 * @returns {String} the severity string
 	 */
@@ -135,9 +136,17 @@ define([
 		    descriptionArgs: e.args,
 			description: e.message,
 			severity: getSeverity(e),
-			start: start,
-			end: end
 		};
+		if(typeof(start) !== 'undefined') {
+		    prob.start = start;
+		    prob.end = end;
+		} else if(typeof(e.lineNumber) !== 'undefined') {
+		    prob.line = e.lineNumber;
+		    prob.start = e.column;
+		} else {
+		    prob.start = 0;
+		    prob.end = 0;
+		}
 		if(e.opts && e.opts.args) {
 		    prob.problemArgs = e.opts.args;
 		}
@@ -166,10 +175,6 @@ define([
 					else if(ast.tokens.length > 0) {
 						//error object did not contain the token infos, try to find it
 						token = Finder.findToken(error.index, ast.tokens);	
-					} 
-					if(!token) {
-						//failed to compute it, continue
-						continue;
 					}
 					var msg = error.message;
 					if(errorMap[error.index] === msg) {
@@ -179,16 +184,27 @@ define([
 					if(error.type) {
 						switch(error.type) {
 							case ASTManager.ErrorTypes.Unexpected:
-								error.args = {0: token.value, nls: "syntaxErrorBadToken"}; //$NON-NLS-0$
-								error.message = msg = error.args.nls;
+							    if(token) {
+    								error.args = {0: token.value, nls: "syntaxErrorBadToken"}; //$NON-NLS-0$
+    								error.message = msg = error.args.nls;
+								}
 								break;
 							case ASTManager.ErrorTypes.EndOfInput:
 								error.args = {nls: "syntaxErrorIncomplete"}; //$NON-NLS-0$
 								error.message = error.args.nls;
 								break;
 						}
+					} else if(!token) {
+					    //an untyped error with no tokens, report the failure
+					    error.args = {0: error.message, nls: 'esprimaParseFailure'};
+					    error.message = error.args.nls;
+					    //use the line number / column
+				       delete error.start;
+				       delete error.end;
 					}
-					error.node = token;
+					if(token) {
+					   error.node = token;
+					}
 					errors.push(error);
 				}
 			}
@@ -325,6 +341,8 @@ define([
 			config.setOption("no-fallthrough", properties.validate_no_fallthrough); //$NON-NLS-0$
 			config.setOption("no-jslint", properties.validate_no_jslint); //$NON-NLS-0$
 			config.setOption("no-empty-block", properties.validate_no_empty_block); //$NON-NLS-0$
+			config.setOption("valid-typeof", properties.validate_typeof); //$NON-NLS-0$
+			config.setOption("no-sparse-arrays", properties.validate_no_sparse_arrays); //$NON-NLS-0$
 		}
 	});
 	return ESLintValidator;

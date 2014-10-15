@@ -119,12 +119,6 @@ define([
 			lib.node( 'iFrameContent' ).appendChild(iframe); //$NON-NLS-0$
 		},
 		
-		confirmOpenId: function(openid){
-			if (openid !== "" && openid !== null) {
-				this.win = window.open( "../mixlogin/manageopenids/openid?openid=" + encodeURIComponent(openid),"openid_popup", "width=790,height=580" ); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
-			}
-		},
-		
 		deleteUser: function(){
 			if(confirm(messages["DeleteUserComfirmation"])){			
 				var userService = this.userService; //$NON-NLS-0$
@@ -144,7 +138,7 @@ define([
 			var userdata = {};
 			
 			userdata.login = this.accountFields[0].getValue();
-			userdata.Name = this.accountFields[1].getValue();
+			userdata.FullName = this.accountFields[1].getValue();
 			userdata.email = this.accountFields[2].getValue();
 			
 			for(var i=0; i<authServices.length; i++){
@@ -158,7 +152,7 @@ define([
 							if(args){
 								messageService.setProgressResult(args);
 							}else{
-								messageService.setProgressResult( messages['User profile data successfully updated.'] );
+								messageService.setProgressResult( messages["UsrProfileUpdateSuccess"] ); //$NON-NLS-0$
 							}
 						}, function(error){
 							messageService.setProgressResult(error);
@@ -304,8 +298,8 @@ define([
 						var b = userService.getUserInfo(jsonData.Location).then( function( accountData ){
 							settingsWidget.username = accountData.login;
 							settingsWidget.accountFields[0].setValue( accountData.login );
-							if (accountData.Name){
-								settingsWidget.accountFields[1].setValue( accountData.Name );
+							if (accountData.FullName){
+								settingsWidget.accountFields[1].setValue( accountData.FullName );
 							} else {
 								settingsWidget.accountFields[1].setValue( '' );
 							}

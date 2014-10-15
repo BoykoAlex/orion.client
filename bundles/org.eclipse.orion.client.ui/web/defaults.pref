@@ -14,6 +14,7 @@
 		"plugins/languages/arduino/arduinoPlugin.html":true,
 		"plugins/languages/c/cPlugin.html":true,
 		"plugins/languages/cpp/cppPlugin.html":true,
+		"plugins/languages/docker/dockerPlugin.html":true,
 		"plugins/languages/erlang/erlangPlugin.html":true,
 		"plugins/languages/go/goPlugin.html":true,
 		"plugins/languages/haml/hamlPlugin.html":true,
@@ -36,6 +37,7 @@
 		"shell/plugins/shellPagePlugin.html":true,
 		"plugins/gitBlamePlugin.html" :true,
 		"cfui/plugins/cFPlugin.html":true,
-		"cfui/plugins/cFDeployPlugin.html":true
+		"cfui/plugins/cFDeployPlugin.html":true,
+		"cfui/plugins/wizards/genericDeploymentWizardPlugin.html":true
 	}
 }

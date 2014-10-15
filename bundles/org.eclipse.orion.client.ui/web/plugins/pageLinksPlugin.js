@@ -190,30 +190,6 @@ define([
 		contentURITemplate: pluginHelloWorld.href
 	});
 
-	provider.registerService("orion.core.setting", null, {
-		settings: [
-			{
-				pid: "nav.config",
-				nls: "orion/settings/nls/messages",
-				nameKey: "Navigation",
-				category: "general",
-				categoryKey: "General",
-				properties: [
-					{
-						id: "links.newtab",
-						nameKey: "Links",
-						type: "boolean",
-						defaultValue: false,
-						options: [
-							{ value: true, labelKey: "Open in new tab" },
-							{ value: false, labelKey: "Open in same tab" }
-						]
-					}
-				]
-			}
-		]
-	});
-
 	var getPluginsTemplate = "http://orion-plugins.googlecode.com/git/index.html#?target={InstallTarget}&version={Version}&OrionHome={OrionHome}";
 	provider.registerService("orion.core.getplugins", null, {
 		uri: decodeURIComponent(new URITemplate(getPluginsTemplate).expand({
@@ -221,33 +197,6 @@ define([
 			InstallTarget: PageLinks.getOrionHome() + "/settings/settings.html",
 			OrionHome: PageLinks.getOrionHome()
 		}))
-	});
-
-	// Getting Started
-	provider.registerService("orion.page.getstarted", null, {
-		data: [
-			{
-				label:"Add",
-				image:"../images/add.png",
-				secondaryImage: "../images/add-large-dulled.png",
-				alt: "Add Content",
-				media:"../media/Create.gif"
-			},
-			{
-				label:"Modify",
-				image:"../images/modify.png",
-				secondaryImage: "../images/gear-large-dulled.png",
-				alt: "Modify Content",
-				media:"../media/Modify.gif"
-			},
-			{
-				label:"Manage",
-				image:"../images/manage.png",
-				secondaryImage: "../images/hamburger-large-dulled.png",
-				alt: "Manage Content",
-				media:"../media/Manage.gif"
-			}
-		]
 	});
 
 	provider.connect();

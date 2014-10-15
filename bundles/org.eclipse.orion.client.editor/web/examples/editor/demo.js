@@ -12,10 +12,13 @@
  *******************************************************************************/
  
 /*eslint-env browser, amd*/
+/*global mocha*/
 
-define(['examples/editor/demoSetup', 'tests/editor/test-performance', 'orion/util'],   
- 
-function(mSetup, mTestPerformance, util) {
+define([
+	'examples/editor/demoSetup',
+	'js-tests/editor/perf/performanceTests',
+	'orion/util',
+], function(mSetup, mTestPerformance, util) {
 	
 	/** Console */
 	var document = window.document;
@@ -39,6 +42,7 @@ function(mSetup, mTestPerformance, util) {
 	var bFullSel = document.getElementById('fullSelection'); //$NON-NLS-0$
 	var bWrap = document.getElementById('wrap'); //$NON-NLS-0$
 	var bMarginRuler = document.getElementById('marginRuler'); //$NON-NLS-0$
+	var bZoomRuler = document.getElementById('zoomRuler'); //$NON-NLS-0$
 	var sMarginOffset = document.getElementById('marginOffset'); //$NON-NLS-0$
 	var sWrapOffset = document.getElementById('wrapOffset'); //$NON-NLS-0$
 	var bExpandTab = document.getElementById('expandTab'); //$NON-NLS-0$
@@ -47,6 +51,7 @@ function(mSetup, mTestPerformance, util) {
 	
 	var keyBindings = "";
 	var showMarginRuler = false;
+	var showZoomRuler = true;
 
 	function resize() {
 		var height = document.documentElement.clientHeight;
@@ -96,6 +101,7 @@ function(mSetup, mTestPerformance, util) {
 			wrapMode: bWrap.checked,
 			keyBindings: (keyBindings = sBindings.value),
 			showMarginRuler: (showMarginRuler = bMarginRuler.checked),
+			showZoomRuler: (showZoomRuler = bZoomRuler.checked),
 			marginOffset: parseInt(sMarginOffset.value, 10),
 			wrapOffset: parseInt(sWrapOffset.value, 10),
 			themeClass: sTheme.value
@@ -109,6 +115,7 @@ function(mSetup, mTestPerformance, util) {
 		bFullSel.checked = options.fullSelection;
 		bWrap.checked = options.wrapMode;
 		bMarginRuler.checked = showMarginRuler;
+		bZoomRuler.checked = showZoomRuler;
 		sWrapOffset.value = options.wrapOffset;
 		sMarginOffset.value = options.marginOffset;
 		bExpandTab.checked = options.expandTab;
@@ -198,6 +205,7 @@ function(mSetup, mTestPerformance, util) {
 	bFullSel.onchange = checkSetOptions;
 	bWrap.onchange = checkSetOptions;
 	bMarginRuler.onchange = checkSetOptions;
+	bZoomRuler.onchange = checkSetOptions;
 	sMarginOffset.onchange = checkSetOptions;
 	sWrapOffset.onchange = checkSetOptions;
 	bExpandTab.onchange = checkSetOptions;
@@ -222,14 +230,14 @@ function(mSetup, mTestPerformance, util) {
 		mSetup.destroyView();
 	}
 	tests.testDestroyTest = destroyTest;
-	
+
+	// Grab perf tests out of the global `mocha` object
+	mocha.suite.eachTest(function(test) {
+		tests["test" + test.title] = test.fn;
+	});
+
 	var prefix = "test"; //$NON-NLS-0$
 	var property, option;
-	for (property in mTestPerformance) {
-		if (property.indexOf(prefix) === 0) {
-			tests[property] = mTestPerformance[property];
-		}
-	}
 	for (property in tests) {
 		if (tests.hasOwnProperty(property)) {
 			option = util.createElement(document, "option"); //$NON-NLS-0$

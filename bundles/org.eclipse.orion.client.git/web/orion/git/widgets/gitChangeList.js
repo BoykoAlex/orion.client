@@ -31,7 +31,6 @@ define([
 	var interestedStagedGroup = [ "Added", "Changed", "Removed" ]; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 	var allGroups = interestedUnstagedGroup.concat(interestedStagedGroup);
 	var conflictType = "Conflicting"; //$NON-NLS-0$
-
 	function isConflict(type) {
 		return type === conflictType;
 	}
@@ -329,6 +328,7 @@ define([
 		this.handleError = options.handleError;
 		this.gitClient = options.gitClient;
 		this.progressService = options.progressService;
+		this.preferencesService = options.preferencesService;
 		this.explorerSelectionScope = "explorerSelection";  //$NON-NLS-0$
 		this.explorerSelectionStatus = "explorerSelectionStatus";  //$NON-NLS-0$
 		this.createSelection();
@@ -340,7 +340,9 @@ define([
 			switch (event.action) {
 			case "commit": //$NON-NLS-0$
 			case "stash": //$NON-NLS-0$
-				this.messageTextArea.value = ""; //$FALLTHROUGH$
+				if (this.messageTextArea) {
+					this.messageTextArea.value = ""; //$FALLTHROUGH$
+				}
 			case "reset": //$NON-NLS-0$
 			case "applyPatch":  //$NON-NLS-0$
 			case "stage": //$NON-NLS-0$
@@ -350,6 +352,23 @@ define([
 			case "popStash": //$NON-NLS-0$
 			case "ignoreFile": //$NON-NLS-0$
 				this.changedItem(event.items);
+				break;
+			}
+		}.bind(this));
+		mGitCommands.getModelEventDispatcher().addEventListener("stateChanging", this._modelChangingListener = function(event) { //$NON-NLS-0$
+			switch (event.action) {
+			case "commit": //$NON-NLS-0$
+			case "stash": //$NON-NLS-0$
+			case "reset": //$NON-NLS-0$
+			case "applyPatch":  //$NON-NLS-0$
+			//case "stage": //$NON-NLS-0$
+			//case "unstage": //$NON-NLS-0$
+			case "checkoutFile": //$NON-NLS-0$
+			case "applyStash": //$NON-NLS-0$
+			case "popStash": //$NON-NLS-0$
+			case "ignoreFile": //$NON-NLS-0$
+			case "selectionChanged": //$NON-NLS-0$
+				event.preCallback = this.unhookCompareWidget.bind(this);
 				break;
 			}
 		}.bind(this));
@@ -386,11 +405,49 @@ define([
 				mGitCommands.getModelEventDispatcher().removeEventListener("modelChanged", this._modelListener); //$NON-NLS-0$
 				this._modelListener = null;
 			}
+			if (this._modelChangingListener) {
+				mGitCommands.getModelEventDispatcher().removeEventListener("modelChanged", this._modelChangingListener); //$NON-NLS-0$
+				this._modelChangingListener = null;
+			}
 			if (this._selectionListener) {
 				this.selection.removeEventListener("selectionChanged", this._selectionListener); //$NON-NLS-0$
 				this._selectionListener = null;
 			}
 			mExplorer.Explorer.prototype.destroy.call(this);
+		},
+		//This function is called when any of the compare widgets in the explorer are hooked up and need to be unhooked
+		unhookCompareWidget: function() {
+			if(!this.model.root) {
+				return new Deferred().resolve(true);
+			}
+			var modelList = this.model.root.children || this.model.root.Children;
+			if(!modelList) {
+				return new Deferred().resolve(true);
+			}
+			var isDirty = modelList.some( function(child) {
+				if(child.children && child.children.length === 1 && child.children[0].resourceComparer && child.children[0].resourceComparer.isDirty()) {
+					return true;
+				}
+			});
+			if(isDirty) {
+				var doSave = window.confirm(messages.confirmUnsavedChanges);
+				if(!doSave) {
+					return new Deferred().resolve();
+				}
+				var promises = [];
+				modelList.forEach( function(child) {
+					if(child.children && child.children.length === 1 && child.children[0].resourceComparer && child.children[0].resourceComparer.isDirty() && child.children[0].resourceComparer.save) {
+						promises.push(child.children[0].resourceComparer.save(doSave));
+					}
+				});				
+				return Deferred.all(promises);
+			} else {
+				return new Deferred().resolve(true);
+			}
+		},
+		//This function is called when the collapseAll command is excuted.
+		preCollapseAll: function() {
+			return this.unhookCompareWidget();
 		},
 		display: function() {
 			var that = this;
@@ -410,7 +467,17 @@ define([
 			});
 			this.createTree(this.parentId, model, {
 				setFocus: false, // do not steal focus on load
-				onComplete: function() {
+				preCollapse: function(rowItem) {
+					if(rowItem && rowItem.children && rowItem.children.length === 1 && rowItem.children[0].resourceComparer) {
+						if(!rowItem.children[0].resourceComparer.isDirty()) {
+							return new Deferred().resolve(true);
+						}
+						var doSave = window.confirm(messages.confirmUnsavedChanges);
+						return rowItem.children[0].resourceComparer.save(doSave);
+					}
+					return new Deferred().resolve(true);
+				},
+				onComplete: function(tree) {
 					var model = that.model;
 					if (that.prefix === "all") { //$NON-NLS-0$
 						that.updateCommands();
@@ -420,10 +487,33 @@ define([
 						that.updateCommands();
 					}
 					that.status = model.status;
+					var children = [];
+					that.model.getRoot(function(root) {
+						that.model.getChildren(root, function(c) {
+							children = c;
+						});
+					});
+					if (that._getDiffCount(children) === 1) {
+						that.expandSections(tree, children).then(function() {
+							deferred.resolve();
+						});
+						return;
+					}
 					deferred.resolve();
 				}
 			});
 			return deferred;
+		},
+		expandSections: function(tree, children) {
+			var deferreds = [];
+			for (var i = 0; i < children.length; i++) {
+				var deferred = new Deferred();
+				deferreds.push(deferred);
+				tree.expand(this.model.getId(children[i]), function (d) {
+					d.resolve();
+				}, [deferred]);
+			}
+			return Deferred.all(deferreds);
 		},
 		isRowSelectable: function(modelItem) {
 			return this.prefix === "all" ? false : mGitUIUtil.isChange(modelItem); //$NON-NLS-0$
@@ -436,14 +526,18 @@ define([
 			var result = 0;
 			var model = this.model;
 			if (model) {
+				var that = this;
 				model.getRoot(function(root) {
 					model.getChildren(root, function(children) {
-						// -1 for the commit message item
-						result = Math.max(0, children.length - (model.prefix === "all" ? 2 : 0)); //$NON-NLS-0$
+						result = that._getDiffCount(children);
 					});
 				});
 			}
 			return result;
+		},
+		_getDiffCount: function(children) {
+			// -2 for the commit message item and explorer selection
+			return Math.max(0, children.length - (this.model.prefix === "all" ? 2 : 1)); //$NON-NLS-0$
 		},
 		updateCommands: function() {
 			mExplorer.createExplorerCommands(this.commandService);
@@ -502,7 +596,6 @@ define([
 				commandRegistry.registerCommandContribution(actionsNodeScope, "eclipse.orion.git.revert", 6); //$NON-NLS-1$ //$NON-NLS-0$
 				commandRegistry.registerCommandContribution(actionsNodeScope, "eclipse.openGitCommit", 7); //$NON-NLS-1$ //$NON-NLS-0$
 				commandRegistry.registerCommandContribution(actionsNodeScope, "eclipse.orion.git.showCommitPatchCommand", 8); //$NON-NLS-1$ //$NON-NLS-0$
-//				commandRegistry.registerCommandContribution(actionsNodeScope, "eclipse.orion.git.askForReviewCommand", 8); //$NON-NLS-1$ //$NON-NLS-0$
 
 				commandRegistry.renderCommands(actionsNodeScope, actionsNodeScope, this.commit, this, "tool"); //$NON-NLS-0$
 			}
@@ -513,9 +606,10 @@ define([
 			}
 		},
 		updateSelectionStatus: function(selections) {
+			if (!selections) selections = this.selection.getSelections();
 			var count = selections ? selections.length : 0;
 			var msg = i18nUtil.formatMessage(messages[count === 1 ? "FileSelected" : "FilesSelected"], count);
-			if (!count && this.messageTextArea.value) {
+			if (!count && this.messageTextArea.value && !this.amendCheck.checked) {
 				this.explorerSelectionStatus.classList.add("invalidFileCount"); //$NON-NLS-0$
 			} else {
 				this.explorerSelectionStatus.classList.remove("invalidFileCount"); //$NON-NLS-0$
@@ -579,6 +673,42 @@ define([
 				}
 			});
 			
+			var toggleMaximizeCommand = new mCommands.Command({
+				name: messages['MaximizeCmd'],
+				tooltip: messages["MaximizeTip"],
+				id: "eclipse.orion.git.toggleMaximizeCommand", //$NON-NLS-0$
+				imageClass: "git-sprite-open", //$NON-NLS-0$
+				spriteClass: "gitCommandSprite", //$NON-NLS-0$
+				type: "toggle", //$NON-NLS-0$
+				callback: function(data) {
+					var diffContainer = lib.node(data.handler.options.parentDivId);
+					diffContainer.style.height = ""; //$NON-NLS-0$
+					var maximized = false;
+					var div = diffContainer.parentNode;
+					if (div.classList.contains("gitChangeListCompareMaximized")) { //$NON-NLS-0$
+						div.classList.remove("gitChangeListCompareMaximized"); //$NON-NLS-0$
+						diffContainer.classList.remove("gitChangeListCompareContainerMaximized"); //$NON-NLS-0$
+					} else {
+						div.classList.add("gitChangeListCompareMaximized"); //$NON-NLS-0$
+						diffContainer.classList.add("gitChangeListCompareContainerMaximized"); //$NON-NLS-0$
+						maximized = true;
+					}
+					data.handler.options.maximized = maximized;
+					if(data.handler.options.titleIds && data.handler.options.titleIds.length === 2) {
+						var dirtyIndicator = lib.node(data.handler.options.titleIds[1]); //$NON-NLS-0$
+						if ( dirtyIndicator) {
+							dirtyIndicator.textContent = data.handler.isDirty() && maximized ? "*" : "";
+						}
+					}
+					(data.handler._editors || [data.handler._editor]).forEach(function(editor) {
+						editor.resize();
+					});
+				},
+				visibleWhen: function() {
+					return true;
+				}
+			});
+			
 			var precommitCommand = new mCommands.Command({
 				name: messages['Commit'],
 				tooltip: messages["CommitTooltip"],
@@ -626,6 +756,7 @@ define([
 			this.commandService.addCommand(precommitCommand);
 			this.commandService.addCommand(selectAllCommand);
 			this.commandService.addCommand(deselectAllCommand);
+			this.commandService.addCommand(toggleMaximizeCommand);
 			this.commandService.addCommand(precommitAndPushCommand);
 			this.commandService.addCommand(precreateStashCommand);
 		},
@@ -695,9 +826,7 @@ define([
 						textArea.classList.add("parameterInput"); //$NON-NLS-0$
 						textArea.addEventListener("keyup", function() { //$NON-NLS-0$
 							textArea.parentNode.classList.remove("invalidParam"); //$NON-NLS-0$
-							if (explorer.prefix === "all") { //$NON-NLS-0$
-								explorer.updateSelectionStatus(explorer.selection.getSelections());
-							}
+							explorer.updateSelectionStatus();
 						});
 						topRow.appendChild(textArea);
 
@@ -762,6 +891,7 @@ define([
 							} else {
 								textArea.value = "";
 							}
+							explorer.updateSelectionStatus();
 						});
 						
 						var moreDiv = document.createElement("div"); //$NON-NLS-0$
@@ -865,6 +995,7 @@ define([
 	
 						itemLabel = document.createElement("span"); //$NON-NLS-0$
 						itemLabel.textContent = item.name;
+						itemLabel.id = explorer.prefix + item.name + item.type + "FileItemId"; //$NON-NLS-0$
 						div.appendChild(itemLabel);
 					} else if (item.Type === "ExplorerSelection") { //$NON-NLS-0$
 						td.colSpan = 2;
@@ -912,12 +1043,17 @@ define([
 						compareWidgetLeftActionWrapper.className = "layoutLeft commandList"; //$NON-NLS-0$
 						compareWidgetLeftActionWrapper.id = prefix + "CompareWidgetLeftActionWrapper"; //$NON-NLS-0$
 						actionsWrapper.appendChild(compareWidgetLeftActionWrapper);
-
+						var dirtyindicator = document.createElement("span"); //$NON-NLS-0$
+						dirtyindicator.className = "layoutLeft"; //$NON-NLS-0$
+						dirtyindicator.id = prefix + "DirtyId"; //$NON-NLS-0$
+						actionsWrapper.appendChild(dirtyindicator);
+						
 						diffActionWrapper = document.createElement("ul"); //$NON-NLS-0$
 						diffActionWrapper.className = "layoutRight commandList"; //$NON-NLS-0$
 						diffActionWrapper.id = prefix + "DiffActionWrapperChange"; //$NON-NLS-0$
 						actionsWrapper.appendChild(diffActionWrapper);
-	
+						explorer.commandService.registerCommandContribution(prefix + "CompareWidgetLeftActionWrapper", "eclipse.orion.git.toggleMaximizeCommand", 1000); //$NON-NLS-1$ //$NON-NLS-0$
+
 						var diffContainer = document.createElement("div"); //$NON-NLS-0$
 						diffContainer.className = "gitChangeListCompare"; //$NON-NLS-0$
 						diffContainer.id = "diffArea_" + item.DiffLocation; //$NON-NLS-0$
@@ -939,11 +1075,21 @@ define([
 									additionalCmdRender : function(gridHolder) {
 										explorer.commandService.destroy(diffActionWrapper.id);
 										explorer.commandService.renderCommands("itemLevelCommands", diffActionWrapper.id, item.parent, explorer, "tool", false, gridHolder); //$NON-NLS-1$ //$NON-NLS-0$
+										explorer.commandService.renderCommands(diffActionWrapper.id, diffActionWrapper.id, item.parent, explorer, "tool", false, gridHolder); //$NON-NLS-0$
 									},
 									before : true
 								},
 								undefined,
-								compareWidgetLeftActionWrapper.id
+								compareWidgetLeftActionWrapper.id,
+								explorer.preferencesService,
+								item.parent.Type === "Diff" ? null : compareWidgetLeftActionWrapper.id,//saveCmdContainerId
+								item.parent.Type === "Diff" ? null : "compare.save." + item.DiffLocation, //saveCmdId
+								//We pass an array of two title Ids here in order for the resource comparer to render the dirty indicator optionally
+								//If the widget is not maximized, the dirty indicator, if any, is rendered at the end of the file name
+								//If the widget is maximized, as the file name is not visible, the "*" is rendered right beside the left hand action wrapper
+								item.parent.Type === "Diff" ? null : [explorer.prefix + item.parent.name + item.parent.type + "FileItemId", dirtyindicator.id],//$NON-NLS-0$ //The compare widget title where the dirty indicator can be inserted
+								//We need to attach the compare widget reference to the model. Also we need the widget to be destroy when the model is destroyed.
+								item
 							);
 						}.bind(this), 0);
 					}
@@ -951,20 +1097,25 @@ define([
 			}
 		},
 		onCheckedFunc: function(rowId, checked, manually, item) {
-			if (item.Type === "ExplorerSelection") { //$NON-NLS-0$
-				if (checked) {
-					this.explorer.commandService.runCommand("orion.explorer.selectAllCommandChangeList", this.explorer, this.explorer); //$NON-NLS-0$
-				} else {
-					this.explorer.commandService.runCommand("orion.explorer.deselectAllCommandChangeList", this.explorer, this.explorer); //$NON-NLS-0$
+			this.explorer.unhookCompareWidget().then(function(result) {
+				if(!result) {
+					return;
 				}
-			} else {
-				//stage or unstage
-				if (checked) {
-					this.explorer.commandService.runCommand("eclipse.orion.git.stageCommand", [item], this.explorer); //$NON-NLS-0$
+				if (item.Type === "ExplorerSelection") { //$NON-NLS-0$
+					if (checked) {
+						this.explorer.commandService.runCommand("orion.explorer.selectAllCommandChangeList", this.explorer, this.explorer); //$NON-NLS-0$
+					} else {
+						this.explorer.commandService.runCommand("orion.explorer.deselectAllCommandChangeList", this.explorer, this.explorer); //$NON-NLS-0$
+					}
 				} else {
-					this.explorer.commandService.runCommand("eclipse.orion.git.unstageCommand", [item], this.explorer); //$NON-NLS-0$
+					//stage or unstage
+					if (checked) {
+						this.explorer.commandService.runCommand("eclipse.orion.git.stageCommand", [item], this.explorer); //$NON-NLS-0$
+					} else {
+						this.explorer.commandService.runCommand("eclipse.orion.git.unstageCommand", [item], this.explorer); //$NON-NLS-0$
+					}
 				}
-			}
+			}.bind(this));
 		}, 
 		getCheckedFunc: function(item){
 			if (item.Type === "ExplorerSelection") { //$NON-NLS-0$

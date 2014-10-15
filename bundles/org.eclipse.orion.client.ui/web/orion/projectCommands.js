@@ -36,13 +36,17 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 		return item;
 	}
 	
-	function getCommandParameters(mainParams, optionalParams){
+	function getCommandParameters(mainParams, optionalParams, hiddenParams){
 		if(!mainParams){
 			return null;
 		}
 		var paramDescps = [];
 		for(var i=0; i<mainParams.length; i++){
-			paramDescps.push(new mCommandRegistry.CommandParameter(mainParams[i].id, mainParams[i].type, mainParams[i].name));
+			if(mainParams[i].hidden){
+				if(hiddenParams) hiddenParams[mainParams[i].id] = mainParams[i].value; 
+			} else {
+				paramDescps.push(new mCommandRegistry.CommandParameter(mainParams[i].id, mainParams[i].type, mainParams[i].name));
+			}
 		}
 		return new mCommandRegistry.ParametersDescription(paramDescps, {hasOptionalParameters: !!optionalParams, optionalParams: optionalParams});
 	}
@@ -104,7 +108,7 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 			if(status.forceShowMessage){
 				progress.setProgressResult(status);
 			}
-			context.data.parameters = getCommandParameters(status.Retry.parameters, status.Retry.optionalParameters);
+			context.data.parameters = getCommandParameters(status.Retry.parameters, status.Retry.optionalParameters, context.oldParams);
 			context.data.oldParams = context.oldParams;
 			context.commandService.collectParameters(context.data);
 		} else {
@@ -114,7 +118,7 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 		
 		
 		if(status.ToSave){
-			progress.showWhile(context.projectClient.saveProjectLaunchConfiguration(context.project, status.ToSave.ConfigurationName, context.deployService.id, status.ToSave.Parameters, status.ToSave.Url, status.ToSave.ManageUrl, status.ToSave.Path, status.ToSave.UrlTitle, status.ToSave.Type), "Saving configuration").then(
+			progress.showWhile(context.projectClient.saveProjectLaunchConfiguration(context.project, status.ToSave.ConfigurationName, context.deployService.id, status.ToSave.Parameters, status.ToSave.Url, status.ToSave.ManageUrl, status.ToSave.Path, status.ToSave.Type), "Saving configuration").then(
 				function(configuration){
 					storeLastDeployment(context.project.Name, context.deployService, configuration);
 					if(sharedLaunchConfigurationDispatcher){
@@ -128,6 +132,14 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 				}, context.errorHandler
 			);
 		} else {
+			if(status.Saved){
+				context.projectClient.formLaunchConfiguration(status.Saved.ConfigurationName, context.deployService.id, status.Saved.Parameters, status.Saved.Url, status.Saved.ManageUrl, status.Saved.Path, status.Saved.Type).then(function(configuration){
+					storeLastDeployment(context.project.Name, context.deployService, configuration);
+					if(sharedLaunchConfigurationDispatcher){
+						sharedLaunchConfigurationDispatcher.dispatchEvent({type: "create", newValue: configuration });
+					}
+				});
+			}
 			displayDeployResult(progress, status, context);
 		}
 	}
@@ -184,76 +196,96 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 			sharedLaunchConfigurationDispatcher.dispatchEvent({type: "changeState", newValue: context.launchConfiguration });
 		}
 		if(context.deployService.getDeployProgressMessage){
-			context.deployService.getDeployProgressMessage(context.project, enhansedLaunchConf).then(function(message){
-				deploy(message);
-			}.bind(this), function(){
-				deploy(context.deployService.name + " in progress");
+			context.projectClient.formPluginLaunchConfiguration(enhansedLaunchConf).then(function(pluginLaunchConf){
+				context.deployService.getDeployProgressMessage(context.project, pluginLaunchConf).then(function(message){
+					deploy(message);
+				}.bind(this), function(){
+					deploy(context.deployService.name + " in progress");
+				}.bind(this));				
 			}.bind(this));
 		} else {
 			deploy(context.deployService.name + " in progress");
 		}
 		
 		function deploy(progressMessage){
-			progress.showWhile(context.deployService.deploy(context.project, enhansedLaunchConf), progressMessage, true).then(function(result){
-				if(!result){
-					return;
-				}
-				
-				if (result.UriTemplate) {
-				    var options = {};
-					options.uriTemplate = result.UriTemplate;
-					options.width = result.Width;
-					options.height = result.Height;
-					options.id = result.UriTemplateId || context.deployService.id; 
-					context.oldParams = enhansedLaunchConf.Params;
-					options.done = function(status){
-						localHandleStatus(status, null, context);
-					};
-					options.status = function(status){localHandleStatus(status, null, context);};
-					mEditorCommands.createDelegatedUI(options);
-					return;
-				}
-	
-				if(context.launchConfiguration && (result.State || result.CheckState)){
-					context.launchConfiguration.status = result;
-					if(sharedLaunchConfigurationDispatcher){
-						sharedLaunchConfigurationDispatcher.dispatchEvent({type: "changeState", newValue: context.launchConfiguration});
+			context.projectClient.formPluginLaunchConfiguration(enhansedLaunchConf).then(function(pluginLaunchConf){			
+				progress.showWhile(context.deployService.deploy(context.project, pluginLaunchConf), progressMessage, true).then(function(result){
+					if(!result){
+						return;
 					}
-				}
-				
-				if(result.ToSave){
-					progress.showWhile(context.projectClient.saveProjectLaunchConfiguration(context.project, result.ToSave.ConfigurationName, context.deployService.id, result.ToSave.Parameters, result.ToSave.Url, result.ToSave.ManageUrl, result.ToSave.Path, result.ToSave.UrlTitle, result.ToSave.Type), "Saving configuration").then(
-						function(configuration){
-							storeLastDeployment(context.project.Name, context.deployService, configuration);
-							if(sharedLaunchConfigurationDispatcher){
-								sharedLaunchConfigurationDispatcher.dispatchEvent({type: "create", newValue: configuration});
-							}
-							if(configuration.File.parent.parent){
-								fileDispatcher.dispatchEvent({type: "create", parent: configuration.File.parent.parent, newValue: configuration.File.parent, ignoreRedirect: true});
-							}
-							fileDispatcher.dispatchEvent({type: "create", parent: configuration.File.parent, newValue: configuration.File, ignoreRedirect: true});
-							displayDeployResult(progress, result, context);
-						}, context.errorHandler
-					);
-				} else {
-					storeLastDeployment(context.project.Name, context.deployService, context.launchConfiguration);
-				}
-				
-				displayDeployResult(progress, result, context);
-				
-			}, function(error){
-				if(error.Retry && error.Retry.parameters){
-					if(error.forceShowMessage){
+					
+					if (result.UriTemplate) {
+					    var options = {};
+						options.uriTemplate = result.UriTemplate;
+						options.width = result.Width;
+						options.height = result.Height;
+						options.id = result.UriTemplateId || context.deployService.id; 
+						context.oldParams = enhansedLaunchConf.Params;
+						options.done = function(status){
+							localHandleStatus(status, null, context);
+						};
+						options.status = function(status){localHandleStatus(status, null, context);};
+						mEditorCommands.createDelegatedUI(options);
+						return;
+					}
+		
+					if(context.launchConfiguration && (result.State || result.CheckState)){
+						context.launchConfiguration.status = result;
+						if(sharedLaunchConfigurationDispatcher){
+							sharedLaunchConfigurationDispatcher.dispatchEvent({type: "changeState", newValue: context.launchConfiguration});
+						}
+					}
+					
+					if(result.ToSave){
+						progress.showWhile(context.projectClient.saveProjectLaunchConfiguration(context.project, result.ToSave.ConfigurationName, context.deployService.id, result.ToSave.Parameters, result.ToSave.Url, result.ToSave.ManageUrl, result.ToSave.Path, result.ToSave.Type), "Saving configuration").then(
+							function(configuration){
+								storeLastDeployment(context.project.Name, context.deployService, configuration);
+								if(sharedLaunchConfigurationDispatcher){
+									sharedLaunchConfigurationDispatcher.dispatchEvent({type: "create", newValue: configuration});
+								}
+								if(configuration.File.parent.parent){
+									fileDispatcher.dispatchEvent({type: "create", parent: configuration.File.parent.parent, newValue: configuration.File.parent, ignoreRedirect: true});
+								}
+								fileDispatcher.dispatchEvent({type: "create", parent: configuration.File.parent, newValue: configuration.File, ignoreRedirect: true});
+								displayDeployResult(progress, result, context);
+							}, context.errorHandler
+						);
+					} else {
+						if(result.Saved){
+							context.projectClient.formLaunchConfiguration(result.Saved.ConfigurationName, context.deployService.id, result.Saved.Parameters, result.Saved.Url, result.Saved.ManageUrl, result.Saved.Path, result.Saved.Type).then(function(configuration){
+								storeLastDeployment(context.project.Name, context.deployService, configuration);
+								if(sharedLaunchConfigurationDispatcher){
+									sharedLaunchConfigurationDispatcher.dispatchEvent({type: "create", newValue: configuration });
+								}							
+							});
+						}
+						storeLastDeployment(context.project.Name, context.deployService, context.launchConfiguration);
+					}
+					
+					displayDeployResult(progress, result, context);
+					
+				}, function(error){
+					if(error.Retry && error.Retry.parameters){
+						if(error.forceShowMessage){
+							context.errorHandler(error);
+						}
+						context.data.oldParams = enhansedLaunchConf.Params;
+						context.data.parameters = getCommandParameters(error.Retry.parameters, error.Retry.optionalParameters, context.data.oldParams);
+						context.commandService.collectParameters(context.data);
+					} else {
 						context.errorHandler(error);
+						storeLastDeployment(context.project.Name, context.deployService, context.launchConfiguration);
+						if((error.State || error.CheckState)){
+							context.launchConfiguration.status = error;
+						} else {
+							delete context.launchConfiguration.status;
+						}
+						if(sharedLaunchConfigurationDispatcher){
+							sharedLaunchConfigurationDispatcher.dispatchEvent({type: "changeState", newValue: context.launchConfiguration});
+						}
 					}
-					context.data.parameters = getCommandParameters(error.Retry.parameters, error.Retry.optionalParameters);
-					context.data.oldParams = enhansedLaunchConf.Params;
-					context.commandService.collectParameters(context.data);
-				} else {
-					context.errorHandler(error);
-					storeLastDeployment(context.project.Name, context.deployService, context.launchConfiguration);
-				}
-			});
+				});
+			}.bind(this));
 		}
 	}
 	
@@ -287,8 +319,8 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 					}, errorHandler);
 			}, function(error){
 				if(error.Retry && error.Retry.addParameters){
-					data.parameters = getCommandParameters(error.Retry.addParameters, error.Retry.optionalParameters);
-					data.oldParams = params;
+					data.oldParams = params || {};
+					data.parameters = getCommandParameters(error.Retry.addParameters, error.Retry.optionalParameters, data.oldParams);
 					commandService.collectParameters(data);
 				}
 				errorHandler(error);
@@ -427,7 +459,7 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 				var item = forceSingleItem(data.items);
 				
 				if(!data.parameters){
-					data.parameters = getCommandParameters(item.parametersRequested, item.optionalParameters);
+					data.parameters = getCommandParameters(item.parametersRequested, item.optionalParameters, item.Params);
 					data.oldParams = item.Params;
 					commandService.collectParameters(data);
 					return;
@@ -467,7 +499,7 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 							
 						}, function(error){
 							if(error.Retry){
-								data.parameters = getCommandParameters(error.Retry.parameters, error.Retry.optionalParameters);
+								data.parameters = getCommandParameters(error.Retry.parameters, error.Retry.optionalParameters, params);
 								data.oldParams = params;
 								commandService.collectParameters(data);
 							} else {
@@ -519,7 +551,7 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 									sharedLaunchConfigurationDispatcher.dispatchEvent({type: "changeState", newValue: item });
 								}
 								if(result.ToSave){
-									progress.showWhile(projectClient.saveProjectLaunchConfiguration(item.project, result.ToSave.ConfigurationName, service.id, result.ToSave.Parameters, result.ToSave.Url, result.ToSave.ManageUrl, result.ToSave.Path, result.ToSave.UrlTitle, result.ToSave.Type), "Saving configuration").then(
+									progress.showWhile(projectClient.saveProjectLaunchConfiguration(item.project, result.ToSave.ConfigurationName, service.id, result.ToSave.Parameters, result.ToSave.Url, result.ToSave.ManageUrl, result.ToSave.Path, result.ToSave.Type), "Saving configuration").then(
 										function(configuration){
 											storeLastDeployment(item.project.Name, service, configuration);
 											if(sharedLaunchConfigurationDispatcher){
@@ -531,10 +563,17 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 											fileDispatcher.dispatchEvent({type: "create", parent: configuration.File.parent, newValue: configuration.File, ignoreRedirect: true});
 										}, errorHandler
 									);
+								} else if (result.Saved) {
+									projectClient.formLaunchConfiguration(result.Saved.ConfigurationName, service.id, result.Saved.Parameters, result.Saved.Url, result.Saved.ManageUrl, result.Saved.Path, result.Saved.Type).then(function(configuration){
+										storeLastDeployment(item.project.Name, service, configuration);
+										if(sharedLaunchConfigurationDispatcher){
+											sharedLaunchConfigurationDispatcher.dispatchEvent({type: "create", newValue: configuration });
+										}
+									});
 								}
 							}, function(error){
 								if(error.Retry){
-									data.parameters = getCommandParameters(error.Retry.parameters, error.Retry.optionalParameters);
+									data.parameters = getCommandParameters(error.Retry.parameters, error.Retry.optionalParameters, params);
 									data.oldParams = params;
 									commandService.collectParameters(data);
 								} else {
@@ -986,7 +1025,7 @@ define(['require', 'i18n!orion/navigate/nls/messages', 'orion/webui/littlelib', 
 							dispatchNewProject(item, project);
 						}, function(error){
 							if(error.Retry && error.Retry.addParameters){
-								data.parameters = getCommandParameters(error.Retry.addParameters, error.Retry.optionalParameters);
+								data.parameters = getCommandParameters(error.Retry.addParameters, error.Retry.optionalParameters, params);
 								data.oldParams = params;
 								commandService.collectParameters(data);
 							}

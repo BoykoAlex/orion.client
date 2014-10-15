@@ -84,8 +84,9 @@
 									<command>node runtests.js</command>
 									<env>
 										<BUILD_ID>${env.BUILD_ID}</BUILD_ID>
-										<BUILD_NAME>${env.BUILD_NAME}</BUILD_NAME>
+										<BUILD_NUMBER>${env.BUILD_NUMBER}</BUILD_NUMBER>
 										<BUILD_TAG>${env.BUILD_TAG}</BUILD_TAG>
+										<JOB_NAME>${env.JOB_NAME}</JOB_NAME>
 										<SAUCE_USERNAME>${SAUCE_USERNAME}</SAUCE_USERNAME>
 										<SAUCE_ACCESS_KEY>${SAUCE_ACCESS_KEY}</SAUCE_ACCESS_KEY>
 									</env>
@@ -131,7 +132,7 @@
 
 										<!-- Wait for the tests to finish -->
 										<echo message="Waiting for ${test.results.url} to become available..." />
-										<waitfor maxwait="10" maxwaitunit="minute" checkevery="30" checkeveryunit="second">
+										<waitfor maxwait="15" maxwaitunit="minute" checkevery="30" checkeveryunit="second">
 											<http url="${test.results.url}"/>
 										</waitfor>
 

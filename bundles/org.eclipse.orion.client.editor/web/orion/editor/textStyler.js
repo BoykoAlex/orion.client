@@ -810,7 +810,7 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 	};
 
 	function TextStyler(view, annotationModel, stylerAdapter) {
-		this._whitespacesVisible = this._spacesVisible = this._tabsVisible = false;
+		this._whitespacesVisible = false;
 		this._highlightCaretLine = false;
 		this._foldingEnabled = true;
 		this._detectTasks = true;
@@ -865,6 +865,11 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 		view.redrawLines();
 	}
 	TextStyler.prototype = {
+		addAnnotationProvider: function(value) {
+			if (typeof value === "function") { //$NON-NLS-0$
+				this._annotationProviders.push(value);
+			}
+		},
 		computeBlocks: function(model, text, block, offset, startIndex, endIndex, maxBlockCount) {
 			return this._stylerAdapter.computeBlocks(model, text, block, offset, startIndex, endIndex, maxBlockCount);
 		},
@@ -915,6 +920,15 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 			}
 			return result;
 		},
+		removeAnnotationProvider: function(value) {
+			if (typeof value !== "function") { //$NON-NLS-0$
+				return;
+			}
+			var index = this._annotationProviders.indexOf(value);
+			if (index !== -1) {
+				this._annotationProviders.splice(index, 1);
+			}
+		},
 		setDetectHyperlinks: function() {
 		},
 		setDetectTasks: function(enabled) {
@@ -925,18 +939,6 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 		},
 		setHighlightCaretLine: function(highlight) {
 			this._highlightCaretLine = highlight;
-		},
-		setSpacesVisible: function(visible) {
-			if (this._spacesVisible === visible) { return; }
-			this._spacesVisible = visible;
-			this.setWhitespacesVisible(this._tabsVisible || this._spacesVisible, false);
-			this._view.redraw();
-		},
-		setTabsVisible: function(visible) {
-			if (this._tabsVisible === visible) { return; }
-			this._tabsVisible = visible;
-			this.setWhitespacesVisible(this._tabsVisible || this._spacesVisible, false);
-			this._view.redraw();
 		},
 		setWhitespacesVisible: function(visible, redraw) {
 			if (this._whitespacesVisible === visible) { return; }
@@ -1203,7 +1205,7 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 			return styles;
 		},
 		_isRenderingWhitespace: function() {
-			return this._whitespacesVisible && (this._tabsVisible || this._spacesVisible);
+			return this._whitespacesVisible;
 		},
 		_onDestroy: function() {
 			this.destroy();
@@ -1219,12 +1221,8 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 				}
 			});
 			if (this._isRenderingWhitespace()) {
-				if (this._spacesVisible) {
-					this._spliceStyles(this._spacePattern, e.ranges, e.lineText, e.lineStart);
-				}
-				if (this._tabsVisible) {
-					this._spliceStyles(this._tabPattern, e.ranges, e.lineText, e.lineStart);
-				}
+				this._spliceStyles(this._spacePattern, e.ranges, e.lineText, e.lineStart);
+				this._spliceStyles(this._tabPattern, e.ranges, e.lineText, e.lineStart);
 			}
 		},
 		_onModelChanged: function(e) {
@@ -1387,13 +1385,13 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 
 			if (!blocks.length && !newBlocks.length) {
 				this.dispatchEvent({
-					type: "BlocksChanged",
+					type: "BlocksChanged", //$NON-NLS-0$
 					oldBlocks: [ancestorBlock],
 					newBlocks: [ancestorBlock]
 				});
 			} else {
 				this.dispatchEvent({
-					type: "BlocksChanged",
+					type: "BlocksChanged", //$NON-NLS-0$
 					oldBlocks: blocks.slice(blockStart, blockEnd),
 					newBlocks: newBlocks
 				});
@@ -1460,6 +1458,13 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 				if (this._detectTasks) {
 					this._computeTasks(ancestorBlock, baseModel, add, ts, te);
 				}
+				this._annotationProviders.forEach(function(current) {
+					var providerRemove = [];
+					var providerAdd = [];
+					current(this._annotationModel, baseModel, ancestorBlock, ts, te, providerRemove, providerAdd);
+					remove = remove.concat(providerRemove);
+					add = add.concat(providerAdd);
+				}.bind(this));
 				this._annotationModel.replaceAnnotations(remove, add);
 			}
 		},
@@ -1577,6 +1582,7 @@ define("orion/editor/textStyler", ['orion/editor/annotations', 'orion/editor/eve
 				}.bind(this));
 			}
 		},
+		_annotationProviders: [],
 		_caretLineStyle: {styleClass: "meta annotation currentLine"}, //$NON-NLS-0$
 		_spacePattern: {regex: /[ ]/g, style: {styleClass: "punctuation separator space", unmergeable: true}}, //$NON-NLS-0$
 		_tabPattern: {regex: /\t/g, style: {styleClass: "punctuation separator tab", unmergeable: true}} //$NON-NLS-0$

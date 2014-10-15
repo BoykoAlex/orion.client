@@ -263,11 +263,13 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 	 * @param {Object} options.domNode
 	 * @param {Object} options.keyBindingFactory
 	 * @param {Object} options.lineNumberRulerFactory
+	 * @param {Object} options.zoomRulerFactory
 	 * @param {Object} options.foldingRulerFactory
 	 * @param {Object} options.statusReporter
 	 * @param {Object} options.textViewFactory
 	 * @param {Object} options.undoStackFactory
 	 * @param {Object} options.textDNDFactory
+	 * @param {Object} options.hoverFactory
 	 */
 	function Editor(options) {
 		options = options || {};
@@ -276,16 +278,19 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 		this._undoStackFactory = options.undoStackFactory;
 		this._textDNDFactory = options.textDNDFactory;
 		this._annotationFactory = options.annotationFactory;
+		this._zoomRulerFactory = options.zoomRulerFactory;
 		this._foldingRulerFactory = options.foldingRulerFactory;
 		this._lineNumberRulerFactory = options.lineNumberRulerFactory;
 		this._contentAssistFactory = options.contentAssistFactory;
 		this._keyBindingFactory = options.keyBindingFactory;
+		this._hoverFactory = options.hoverFactory;
 		
 		this._annotationStyler = null;
 		this._annotationModel = null;
 		this._annotationRuler = null;
 		this._lineNumberRuler = null;
 		this._overviewRuler = null;
+		this._zoomRuler = null;
 		this._foldingRuler = null;
 		this._contentAssist = null;
 	}
@@ -298,7 +303,7 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 			BaseEditor.prototype.destroy.call(this);
 			this._textViewFactory = this._undoStackFactory = this._textDNDFactory = 
 			this._annotationFactory = this._foldingRulerFactory = this._lineNumberRulerFactory = 
-			this._contentAssistFactory = this._keyBindingFactory = null;
+			this._contentAssistFactory = this._keyBindingFactory = this._hoverFactory = this._zoomRulerFactory = null;
 		},
 		/**
 		 * Returns the annotation model of the editor. 
@@ -347,6 +352,14 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 		 */
 		getLineNumberRuler: function() {
 			return this._lineNumberRuler;
+		},
+		/**
+		 * Returns the zoom ruler of the editor. 
+		 *
+		 * @returns {orion.editor.LineNumberRuler}
+		 */
+		getZoomRuler: function() {
+			return this._zoomRuler;
 		},
 		/**
 		 * Returns the base text model of this editor.
@@ -491,6 +504,22 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 				textView.removeRuler(this._overviewRuler);
 			}
 		},
+		/**
+		 * Sets whether the zoom ruler is visible.
+		 *
+		 * @param {Boolean} visible <code>true</code> to show ruler, <code>false</code> otherwise
+		 */
+		setZoomRulerVisible: function(visible, force) {
+			if (this._zoomRulerVisible === visible && !force) { return; }
+			this._zoomRulerVisible = visible;
+			if (!this._zoomRuler) { return; }
+			var textView = this._textView;
+			if (visible) {
+				textView.addRuler(this._zoomRuler);
+			} else {
+				textView.removeRuler(this._zoomRuler);
+			}
+		},
 		
 		mapOffset: function(offset, parent) {
 			var textView = this._textView;
@@ -630,14 +659,27 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 			offset = this.mapOffset(offset);
 			var annotations = annotationStyler.getAnnotationsByType(annotationModel, offset, offset + 1);
 			var rangeAnnotations = [];
+			var annotationMsgs = [];
 			for (var i = 0; i < annotations.length; i++) {
 				if (annotations[i].rangeStyle) {
 					rangeAnnotations.push(annotations[i]);
+					annotationMsgs.push(annotations[i].title);
 				}
 			}
-			if (rangeAnnotations.length === 0) { return null; }
+			
+			var deferredInfo = [];
+			if (this._hover) {
+				var context = {offset: offset, 
+								annotations: annotationMsgs};
+				deferredInfo = this._hover.computeHoverInfo(context);
+			}
+			
+			if (rangeAnnotations.length === 0 && deferredInfo.length === 0) {
+				return null;
+			}
 			var pt = textView.convert({x: x, y: y}, "document", "page"); //$NON-NLS-1$ //$NON-NLS-0$
 			var info = {
+				deferredInfo: deferredInfo,
 				contents: rangeAnnotations,
 				anchor: "left", //$NON-NLS-0$
 				x: pt.x + 10,
@@ -700,6 +742,10 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 			if (this._contentAssistFactory) {
 				var contentAssistMode = this._contentAssistFactory.createContentAssistMode(this);
 				this._contentAssist = contentAssistMode.getContentAssist();
+			}
+			
+			if (this._hoverFactory) {
+				this._hover = this._hoverFactory.createHover(this);
 			}
 			
 			var editor = this, textView = this._textView;
@@ -850,6 +896,11 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 				this.setOverviewRulerVisible(this._overviewRulerVisible || this._overviewRulerVisible === undefined, true);
 			}
 			
+			if (this._zoomRulerFactory) {
+				this._zoomRuler = this._zoomRulerFactory.createZoomRuler(this._annotationModel);
+				this.setZoomRulerVisible(this._zoomRulerVisible || this._zoomRulerVisible === undefined, true);
+			}
+			
 			if (this._lineNumberRulerFactory) {
 				this._lineNumberRuler = this._lineNumberRulerFactory.createLineNumberRuler(this._annotationModel);
 				this._lineNumberRuler.addAnnotationType(AT.ANNOTATION_CURRENT_BLAME);
@@ -890,10 +941,10 @@ define("orion/editor/editor", [ //$NON-NLS-0$
 			}
 			this._textView = this._undoStack = this._textDND = this._contentAssist = 
 				this._listener = this._annotationModel = this._annotationStyler =
-				this._annotationRuler = this._overviewRuler = this._lineNumberRuler =
+				this._annotationRuler = this._overviewRuler = this._zoomRuler = this._lineNumberRuler =
 				this._foldingRuler = this._currentLineAnnotation = this._title = null;
 			this._dirty = false;
-			this._foldingRulerVisible = this._overviewRulerVisible =
+			this._foldingRulerVisible = this._overviewRulerVisible = this._zoomRulerVisible =
 				this._lineNumberRulerVisible = this._annotationRulerVisible = undefined;
 			
 			var textViewUninstalledEvent = {
