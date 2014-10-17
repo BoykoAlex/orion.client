@@ -253,7 +253,7 @@ define([
 					removedClasses.push("progressWarning");
 					removedClasses.push("progressInfo");
 					removedClasses.push("progressNormal"); //$NON-NLS-0$
-					this._clickToDisMiss = true; 
+					this._clickToDisMiss = true;
 					break;
 				default:
 					extraClass="progressNormal"; //$NON-NLS-0$
