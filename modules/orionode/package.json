@@ -1,7 +1,7 @@
 {
-  "name": "orion-flux",
-  "version": "0.0.36",
-  "description": "An Eclipse Orion server based on Node.js and connect. Modified somewhat to accomodate flux",
+  "name": "orion",
+  "version": "0.0.32",
+  "description": "An Eclipse Orion server based on Node.js and connect.",
   "homepage": "http://eclipse.org/orion/",
   "bugs": "https://bugs.eclipse.org/bugs/enter_bug.cgi?product=Orion&component=Node",
   "dependencies": {
@@ -33,7 +33,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:BoykoAlex/orion.client.git"
+    "url": "git://git.eclipse.org/gitroot/orion/org.eclipse.orion.client.git"
   },
   "keywords": [
     "orion",
@@ -47,7 +47,10 @@
     "cFDeployService",
     "cFPlugin",
     "deploy",
+    "git-commit",
+    "git-log",
     "git-repository",
+    "git-status",
     "gitBlamePlugin",
     "gitPlugin",
     "GerritFilePlugin",

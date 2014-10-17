@@ -253,11 +253,7 @@ define([
 					removedClasses.push("progressWarning");
 					removedClasses.push("progressInfo");
 					removedClasses.push("progressNormal"); //$NON-NLS-0$
-					this._clickToDisMiss = false; 
-					//                     ^^^^^ Changed:
-					// Error's should be somewhat harder to dismiss than info messages 
-					// 'disapear on click' makes them sometimes disappear 'by accident'
-					// before one has a chance to really read them.
+					this._clickToDisMiss = true; 
 					break;
 				default:
 					extraClass="progressNormal"; //$NON-NLS-0$
