@@ -183,13 +183,8 @@ define("orion/editor/contentAssist", [ //$NON-NLS-0$
 			view.setText(proposalText, start, end);
 			if (proposal.additionalEdits) {
 				var edit;
-				if (Object.prototype.toString.call(proposal.additionalEdits) === '[object Array]') {
-					for (var i = 0; i < proposal.additionalEdits.length; i++) {
-						edit = proposal.additionalEdits[i];
-						view.setText(edit.text, edit.offset, edit.offset + edit.length);
-					}
-				} else {
-					edit = proposal.additionalEdits;
+				for (var i = 0; i < proposal.additionalEdits.length; i++) {
+					edit = proposal.additionalEdits[i];
 					view.setText(edit.text, edit.offset, edit.offset + edit.length);
 				}
 			}
