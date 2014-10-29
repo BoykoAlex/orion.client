@@ -27,6 +27,8 @@ define([
 	'orion/objects'
 ], function(messages, i18nUtil, Deferred, mExplorer, mGitUIUtil, mGitUtil, mTooltip, mSelection , lib, mGitCommands, mCommands, gitCommit, objects) {
 	
+	var pageQuery = "?pageSize=100&page=1"; //$NON-NLS-0$
+	
 	var interestedUnstagedGroup = [ "Missing", "Modified", "Untracked", "Conflicting" ]; //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 	var interestedStagedGroup = [ "Added", "Changed", "Removed" ]; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 	var allGroups = interestedUnstagedGroup.concat(interestedStagedGroup);
@@ -57,17 +59,15 @@ define([
 		this.commitName = options.commitName;
 		this.repository = options.repository;
 		this.handleError = options.handleError;
-		this.changes = options.changes;
 		this.gitClient = options.gitClient;
 		this.progressService = options.progressService;
 		this.section = options.section;
+		this.root = this.changes || {Type: this.location ? "Diff" : "Root"}; //$NON-NLS-1$ //$NON-NLS-0$
 	}
-	GitChangeListModel.prototype = Object.create(mExplorer.Explorer.prototype);
+	GitChangeListModel.prototype = Object.create(mExplorer.ExplorerModel.prototype);
 	objects.mixin(GitChangeListModel.prototype, /** @lends orion.git.GitChangeListModel.prototype */ {
-		destroy: function(){
-		},
 		getRoot: function(onItem){
-			onItem(this.changes || (this.root || (this.root = {Type: "Root"}))); //$NON-NLS-0$
+			onItem(this.root);
 		},
 		getGroups: function(prefix) {
 			switch(prefix) {
@@ -79,8 +79,10 @@ define([
 					return interestedUnstagedGroup;
 			}
 		},
-		_processDiffs: function(diffs) {
-			diffs.forEach(function(item) {
+		processMoreChildren: function(parentItem, children, item) {
+			var fullList = parentItem.children;
+			
+			children.forEach(function(item) {
 				var path = item.OldPath;
 				if (item.ChangeType === "ADD") { //$NON-NLS-0$
 					path = item.NewPath;
@@ -88,10 +90,20 @@ define([
 				item.name = path;
 				item.type = item.ChangeType;
 			});
-			if (diffs.length > 0) {
-				diffs.unshift({Type: "ExplorerSelection", selectable: true}); //$NON-NLS-0$
+			
+			if (fullList) {
+				var args = [fullList.length - 1, 1].concat(children);
+				Array.prototype.splice.apply(fullList, args);
+			} else {
+				fullList = children;
+				if (children.length > 0) {
+					children.unshift({Type: "ExplorerSelection", selectable: true}); //$NON-NLS-0$
+				}
 			}
-			return diffs;
+			if (item.NextLocation) {
+				fullList.push({Type: "MoreFiles", NextLocation: item.NextLocation, selectable: false, isNotSelectable: true}); //$NON-NLS-0$
+			}
+			return fullList;
 		},
 		processChildren: function(parentItem, children) {
 			parentItem.children = children;
@@ -102,39 +114,46 @@ define([
 		},
 		getChildren: function(parentItem, onComplete){
 			var that = this;
-			if (parentItem.children) {
+			var progressService = this.progressService;
+			var gitClient = this.gitClient;
+			var repository = that.repository;
+			var progress, location;
+			if (parentItem.children && !parentItem.more) {
 				onComplete(parentItem.children);
-			} else if (parentItem instanceof Array && parentItem.length > 0) {
-				onComplete(that.processChildren(parentItem, this._processDiffs(parentItem.slice(0))));
-			} else if (parentItem.Type === "Root") { //$NON-NLS-0$
-				var location = this.location; 
-				var progressService = this.progressService;
-				var gitClient = this.gitClient;
-				var progress = this.section.createProgressMonitor();
+			} else if (parentItem.Children) {
+				onComplete(that.processChildren(parentItem, that.processMoreChildren(parentItem, parentItem.Children.slice(0), parentItem)));
+			} else if (parentItem.Type === "Diff" && !parentItem.parent) { //$NON-NLS-0$
+				progress = this.section.createProgressMonitor();
 				progress.begin(messages["Getting changes"]);
-				var repository = that.repository;
-				if (location) {
-					function doDiff(loc) {
-						gitClient.doGitDiff(loc + "?parts=diffs").then(function(resp) { //$NON-NLS-0$
-							progress.done();
-							onComplete(that.processChildren(parentItem, that._processDiffs(resp.Children)));
-						}, function(error) {
-							progress.done();
-							that.handleError(error);
-						});
-					}
-					if (this.commitName) {
-						gitClient.getDiff(location, this.commitName).then(function(resp) {
-							doDiff(resp.Location);
-						}, function(error) {
-							progress.done();
-							that.handleError(error);
-						});
-					} else {
-						doDiff(location);
-					}
+				location = parentItem.more ? parentItem.location : (this.location ? this.location + pageQuery : "");
+				if (!location) {
+					progress.done();
+					onComplete([]);
 					return;
 				}
+				function doDiff(loc) {
+					gitClient.doGitDiff(loc + "&parts=diffs").then(function(resp) { //$NON-NLS-0$
+						progress.done();
+						parentItem.Length = resp.Length;
+						onComplete(that.processChildren(parentItem, that.processMoreChildren(parentItem, resp.Children, resp)));
+					}, function(error) {
+						progress.done();
+						that.handleError(error);
+					});
+				}
+				if (this.commitName && !parentItem.more) {
+					gitClient.getDiff(location, this.commitName).then(function(resp) {
+						doDiff(resp.Location + pageQuery);
+					}, function(error) {
+						progress.done();
+						that.handleError(error);
+					});
+				} else {
+					doDiff(location);
+				}
+			} else if (parentItem.Type === "Root") { //$NON-NLS-0$
+				progress = this.section.createProgressMonitor();
+				progress.begin(messages["Getting changes"]);
 				location = repository.StatusLocation;
 				Deferred.when(repository.status || (repository.status = progressService.progress(gitClient.getGitStatus(location), messages["Getting changes"])), function(resp) {//$NON-NLS-0$
 					var status = that.status = that.items = resp;
@@ -152,6 +171,7 @@ define([
 									status.Clone.Config.push(config[i]);
 							}
 							var children = that._sortBlock(that.getGroups(that.prefix));
+							parentItem.Length = children.length;
 							if (that.prefix === "all") { //$NON-NLS-0$
 								if (children.length > 0) {
 									children.unshift({Type: "ExplorerSelection", selectable: true}); //$NON-NLS-0$
@@ -185,7 +205,7 @@ define([
 		},
 		getId: function(/* item */ item){
 			var prefix = this.prefix;
-			if (item instanceof Array && item.length > 0 || item.Type === "Root") { //$NON-NLS-0$
+			if (item.Type === "Root") { //$NON-NLS-0$
 				return prefix + "Root"; //$NON-NLS-0$
 			} else if (mGitUIUtil.isChange(item)) {
 				return  prefix + item.type + item.name; 
@@ -353,6 +373,9 @@ define([
 			case "ignoreFile": //$NON-NLS-0$
 				this.changedItem(event.items);
 				break;
+			case "mergeSquash": //$NON-NLS-0$
+				this.changedItem();
+				break;
 			}
 		}.bind(this));
 		mGitCommands.getModelEventDispatcher().addEventListener("stateChanging", this._modelChangingListener = function(event) { //$NON-NLS-0$
@@ -378,11 +401,11 @@ define([
 		changedItem: function(items) {
 			this.model.repository.status = "";
 			var deferred = new Deferred();
+			var that = this;
 			if (this.prefix === "all") { //$NON-NLS-0$
 				var parent = this.model.root;
 				var commitInfo = this.getCommitInfo();
 				var moreVisible = this.getMoreVisible();
-				var that = this;
 				parent.children = parent.Children = null;
 				this.model.getChildren(parent, function(children) {
 					parent.removeAll = true;
@@ -393,6 +416,24 @@ define([
 					that.selection.setSelections(selection);
 					that.setMoreVisible(moreVisible);
 					that.setCommitInfo(commitInfo);
+					deferred.resolve(children);
+				});
+			} else if (this.prefix === "diff") { //$NON-NLS-0$
+				var model = this.model;
+				var item = items;
+				if (!item) {
+					model.getRoot(function(root) {
+						item = root;
+					});
+				}
+				if (!item.more) {
+					item.children = null;
+				}	
+				item.Children = null;
+				model.getChildren(item, function(children) {
+					item.more = false;
+					item.removeAll = true;
+					that.myTree.refresh.bind(that.myTree)(item, children, false);
 					deferred.resolve(children);
 				});
 			} else {
@@ -487,14 +528,8 @@ define([
 						that.updateCommands();
 					}
 					that.status = model.status;
-					var children = [];
-					that.model.getRoot(function(root) {
-						that.model.getChildren(root, function(c) {
-							children = c;
-						});
-					});
-					if (that._getDiffCount(children) === 1) {
-						that.expandSections(tree, children).then(function() {
+					if (that.getItemCount() === 1) {
+						that.expandSections(tree, model.root.children).then(function() {
 							deferred.resolve();
 						});
 						return;
@@ -526,18 +561,9 @@ define([
 			var result = 0;
 			var model = this.model;
 			if (model) {
-				var that = this;
-				model.getRoot(function(root) {
-					model.getChildren(root, function(children) {
-						result = that._getDiffCount(children);
-					});
-				});
+				result = model.root.Length;
 			}
 			return result;
-		},
-		_getDiffCount: function(children) {
-			// -2 for the commit message item and explorer selection
-			return Math.max(0, children.length - (this.model.prefix === "all" ? 2 : 1)); //$NON-NLS-0$
 		},
 		updateCommands: function() {
 			mExplorer.createExplorerCommands(this.commandService);
@@ -807,6 +833,30 @@ define([
 					div = document.createElement("div"); //$NON-NLS-0$
 					div.className = "sectionTableItem"; //$NON-NLS-0$
 					td.appendChild(div);
+					
+					if (item.Type === "MoreFiles") { //$NON-NLS-1$ //$NON-NLS-0$
+						td.classList.add("gitListMore"); //$NON-NLS-0$
+						var moreText = messages[item.Type];
+						var moreButton = document.createElement("button"); //$NON-NLS-0$
+						moreButton.className = "commandButton"; //$NON-NLS-0$
+						moreButton.textContent = i18nUtil.formatMessage(messages[item.Type], moreText);
+						td.appendChild(moreButton);
+						var listener;
+						moreButton.addEventListener("click", listener = function() { //$NON-NLS-0$
+							moreButton.removeEventListener("click", listener); //$NON-NLS-0$
+							moreButton.textContent = messages[item.Type + "Progress"];
+							item.parent.location = item.NextLocation;
+							item.parent.more = true;
+							var offsetParent = lib.getOffsetParent(td);
+							var scrollTop = offsetParent ? offsetParent.scrollTop : 0;
+							explorer.changedItem(item.parent).then(function() {
+								if (offsetParent) offsetParent.scrollTop = scrollTop;
+								item.parent.more = false;
+							});
+						});
+						return td;
+					}
+				
 					if (item.Type === "CommitMsg") { //$NON-NLS-0$
 						tableRow.classList.add("gitCommitMessageSection"); //$NON-NLS-0$
 						var outerDiv = document.createElement("div"); //$NON-NLS-0$
@@ -1013,7 +1063,7 @@ define([
 						} else {
 							var changedLabel = explorer.explorerChangedStatus = document.createElement("div"); //$NON-NLS-0$
 							changedLabel.className = "gitChangeListChangedStatus"; //$NON-NLS-0$
-							var changed = item.parent.children.length - 1;
+							var changed = explorer.model.root.Length;
 							changedLabel.textContent = i18nUtil.formatMessage(messages[changed === 1 ? 'FileChanged' : "FilesChanged"], changed);
 							div.appendChild(changedLabel);
 						}
@@ -1082,12 +1132,12 @@ define([
 								undefined,
 								compareWidgetLeftActionWrapper.id,
 								explorer.preferencesService,
-								item.parent.Type === "Diff" ? null : compareWidgetLeftActionWrapper.id,//saveCmdContainerId
-								item.parent.Type === "Diff" ? null : "compare.save." + item.DiffLocation, //saveCmdId
+								item.parent.Type === "Diff" ? null : compareWidgetLeftActionWrapper.id, //saveCmdContainerId  //$NON-NLS-0$
+								item.parent.Type === "Diff" ? null : "compare.save." + item.DiffLocation, //saveCmdId  //$NON-NLS-1$ //$NON-NLS-0$
 								//We pass an array of two title Ids here in order for the resource comparer to render the dirty indicator optionally
 								//If the widget is not maximized, the dirty indicator, if any, is rendered at the end of the file name
 								//If the widget is maximized, as the file name is not visible, the "*" is rendered right beside the left hand action wrapper
-								item.parent.Type === "Diff" ? null : [explorer.prefix + item.parent.name + item.parent.type + "FileItemId", dirtyindicator.id],//$NON-NLS-0$ //The compare widget title where the dirty indicator can be inserted
+								item.parent.Type === "Diff" ? null : [explorer.prefix + item.parent.name + item.parent.type + "FileItemId", dirtyindicator.id], //$NON-NLS-1$ //$NON-NLS-0$ //The compare widget title where the dirty indicator can be inserted
 								//We need to attach the compare widget reference to the model. Also we need the widget to be destroy when the model is destroyed.
 								item
 							);

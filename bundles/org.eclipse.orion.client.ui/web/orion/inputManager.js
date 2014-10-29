@@ -308,11 +308,20 @@ define([
 			}
 		},
 		save: function(closing) {
-			if (this._saving) { return; }
-			var editor = this.getEditor();
-			if (!editor || !editor.isDirty() || this.getReadOnly()) { return; }
-			var failedSaving = this._errorSaving;
+			if (this._saving) { return this._savingDeferred; }
+			var self = this;
+			this._savingDeferred = new Deferred();
 			this._saving = true;
+			function done(result) {
+				var deferred = self._savingDeferred;
+				deferred.resolve(result);
+				self._savingDeferred = null;
+				self._saving = false;
+				return deferred;
+			}
+			var editor = this.getEditor();
+			if (!editor || !editor.isDirty() || this.getReadOnly()) { return done(); }
+			var failedSaving = this._errorSaving;
 			var input = this.getInput();
 			this.reportStatus(messages['Saving...']);
 
@@ -348,7 +357,6 @@ define([
 			if (progress) {
 				def = progress.progress(def, i18nUtil.formatMessage(messages.savingFile, input));
 			}
-			var self = this;
 			function successHandler(result) {
 				if (input === self.getInput()) {
 					self.getFileMetadata().ETag = result.ETag;
@@ -361,16 +369,15 @@ define([
 				if (self.postSave) {
 					self.postSave(closing);
 				}
-				self._saving = false;
-				return new Deferred().resolve(result);
+				return done(result);
 			}
 			function errorHandler(error) {
 				self.reportStatus("");
 				handleError(statusService, error);
-				self._saving = false;
 				self._errorSaving = true;
+				return done();
 			}
-			return def.then(successHandler, function(error) {
+			def.then(successHandler, function(error) {
 				// expected error - HTTP 412 Precondition Failed
 				// occurs when file is out of sync with the server
 				if (error.status === 412) {
@@ -381,15 +388,16 @@ define([
 						if (progress) {
 							def = progress.progress(def, i18nUtil.formatMessage(messages.savingFile, input));
 						}
-						return def.then(successHandler, errorHandler);
+						def.then(successHandler, errorHandler);
 					} else {
-						self._saving = false;
+						return done();
 					}
 				} else {
 					// unknown error
 					errorHandler(error);
 				}
 			});
+			return this._savingDeferred;
 		},
 		setAutoLoadEnabled: function(enabled) {
 			this._autoLoadEnabled = enabled;

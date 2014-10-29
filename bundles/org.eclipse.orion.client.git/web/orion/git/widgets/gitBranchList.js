@@ -39,10 +39,8 @@ define([
 		this.gitClient = options.gitClient;
 		this.filterQuery = "";
 	}
-	GitBranchListModel.prototype = Object.create(mExplorer.Explorer.prototype);
+	GitBranchListModel.prototype = Object.create(mExplorer.ExplorerModel.prototype);
 	objects.mixin(GitBranchListModel.prototype, /** @lends orion.git.GitBranchListModel.prototype */ {
-		destroy: function(){
-		},
 		getRoot: function(onItem){
 			onItem(this.root);
 		},
@@ -306,7 +304,7 @@ define([
 					td = document.createElement("td"); //$NON-NLS-0$
 					
 					if (item.Type === "MoreBranches" || item.Type === "MoreTags" || item.Type === "MoreStashes") { //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
-						td.classList.add("gitCommitListMore"); //$NON-NLS-0$
+						td.classList.add("gitListMore"); //$NON-NLS-0$
 						var moreButton = document.createElement("button"); //$NON-NLS-0$
 						moreButton.className = "commandButton"; //$NON-NLS-0$
 						moreButton.textContent = i18nUtil.formatMessage(messages[item.Type], item.parent.Name);
@@ -317,7 +315,10 @@ define([
 							moreButton.textContent = i18nUtil.formatMessage(messages[item.Type + "Progress"], item.parent.Name);
 							item.parent.location = item.NextLocation;
 							item.parent.more = true;
+							var offsetParent = lib.getOffsetParent(td);
+							var scrollTop = offsetParent ? offsetParent.scrollTop : 0;
 							explorer.changedItem(item.parent).then(function() {
+								if (offsetParent) offsetParent.scrollTop = scrollTop;
 								item.parent.more = false;
 							});
 						});

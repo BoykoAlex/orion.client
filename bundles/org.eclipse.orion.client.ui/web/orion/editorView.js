@@ -40,7 +40,8 @@ define([
 	'orion/keyBinding',
 	'orion/uiUtils',
 	'orion/util',
-	'orion/objects'
+	'orion/objects',
+	'orion/metrics'
 ], function(
 	messages,
 	mEditor, mEventTarget, mTextView, mTextModel, mProjectionTextModel, mEditorFeatures, mHoverFactory, mContentAssist,
@@ -48,8 +49,9 @@ define([
 	mSearcher, mEditorCommands, mGlobalCommands,
 	mDispatcher, EditorContext, TypeDefRegistry, Highlight,
 	mMarkOccurrences, mSyntaxchecker, LiveEditSession,
-	mKeyBinding, mUIUtils, util, objects
+	mKeyBinding, mUIUtils, util, objects, mMetrics
 ) {
+	var Dispatcher = mDispatcher.Dispatcher;
 
 	function parseNumericParams(input, params) {
 		for (var i = 0; i < params.length; i++) {
@@ -444,7 +446,7 @@ define([
 				this.showSelection(params.start, params.end, params.line, params.offset, params.length);
 			};
 
-			this.dispatcher = new mDispatcher.Dispatcher(this.serviceRegistry, this.contentTypeRegistry, editor, inputManager);
+			this.dispatcher = new Dispatcher(this.serviceRegistry, this.contentTypeRegistry, editor, inputManager);
 			if(themePreferences && editorPreferences){
 				localSettings = new EditorSettings({local: true, editor: editor, themePreferences: themePreferences, preferences: editorPreferences});
 			}
@@ -453,6 +455,7 @@ define([
 			inputManager.addEventListener("InputChanged", function(event) { //$NON-NLS-0$
 				var textView = editor.getTextView();
 				if (textView) {
+					mMetrics.logEvent("editor", "editor opened", event.contentType.id); //$NON-NLS-1$ //$NON-NLS-0$
 					liveEditSession.start(inputManager.getContentType(), event.title);
 					textView.setOptions(this.updateViewOptions(this.settings));
 					this.syntaxHighlighter.setup(event.contentType, editor.getTextView(), editor.getAnnotationModel(), event.title, true).then(function() {
@@ -488,15 +491,18 @@ define([
 			markOccurrences.setOccurrencesVisible(this.settings.occurrencesVisible);
 			markOccurrences.findOccurrences();
 			
-			var syntaxChecker = new mSyntaxchecker.SyntaxChecker(serviceRegistry, editor);
+			var syntaxChecker = new mSyntaxchecker.SyntaxChecker(serviceRegistry, editor.getModel());
 			editor.addEventListener("InputChanged", function(evt) { //$NON-NLS-0$
-				syntaxChecker.checkSyntax(inputManager.getContentType(), evt.title, evt.message, evt.contents);
+				syntaxChecker.setTextModel(editor.getModel());
+				syntaxChecker.checkSyntax(inputManager.getContentType(), evt.title, evt.message, evt.contents).then(function(problems) {
+					serviceRegistry.getService("orion.core.marker")._setProblems(problems); //$NON-NLS-0$
+				});
 				if (inputManager.getReadOnly()) {
 					editor.reportStatus(messages.readonly, "error"); //$NON-NLS-0$
 				}
 			});
 
-			var contextImpl = {};
+			var contextImpl = Object.create(null);
 			[
 				"getCaretOffset", "setCaretOffset", //$NON-NLS-1$ //$NON-NLS-0$
 				"getSelection", "setSelection", //$NON-NLS-1$ //$NON-NLS-0$
@@ -510,6 +516,12 @@ define([
 			});
 			contextImpl.showMarkers = function(markers) {
 				serviceRegistry.getService("orion.core.marker")._setProblems(markers); //$NON-NLS-0$
+			};
+			/**
+			 * @since 7.0
+			 */
+			contextImpl.getFileMetadata = function() {
+				return self.dispatcher.getServiceFileObject();
 			};
 			// Forward status from plugin to orion.page.message
 			contextImpl.setStatus = mEditorCommands.handleStatusMessage.bind(null, serviceRegistry);

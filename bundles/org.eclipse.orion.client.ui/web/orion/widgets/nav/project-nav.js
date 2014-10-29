@@ -148,6 +148,8 @@ define([
 				projectData.fileMetadata = fileMetadata;
 				return CommonNavExplorer.prototype.display.call(this, projectData, redisplay).then(function() {
 					return this.expandItem(fileMetadata);
+				}.bind(this)).then(function () {
+					this.sidebarNavInputManager.dispatchEvent({type:"projectDisplayed", item: fileMetadata}); //$NON-NLS-0$
 				}.bind(this));
 			}.bind(this));
 		},
@@ -248,7 +250,9 @@ define([
 						var _self = this;
 						this.launchConfigurationDispatcher = ProjectCommands.getLaunchConfigurationDispatcher();
 						this.launchConfigurationListener = function(event){
-							if(event.type === "changedDefault"){ //$NON-NLS-0$
+							if(event.type === "changedVisibility"){
+								_self.updateCommands.apply(_self, selections);
+							} if(event.type === "changedDefault"){ //$NON-NLS-0$
 								var defaultCommand = ProjectCommands.getDefaultLaunchCommand(_self.treeRoot.Project.Name);
 								if (defaultCommand) {
 									_self.defaultDeployCommand = _self.commandRegistry.findCommand(defaultCommand);
@@ -288,7 +292,7 @@ define([
 								doUpdateForLaunchConfigurations.apply(_self, [_self.treeRoot.Project.launchConfigurations]);
 							});
 						};
-						this._launchConfigurationEventTypes = ["create", "delete", "changedDefault", "deleteAll"]; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+						this._launchConfigurationEventTypes = ["create", "delete", "changedDefault", "deleteAll", "changedVisibility"]; //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 						this._launchConfigurationEventTypes.forEach(function(eventType) {
 							_self.launchConfigurationDispatcher.addEventListener(eventType, _self.launchConfigurationListener);
 						});
@@ -412,6 +416,13 @@ define([
 						}
 					}
 				});
+				var handleDisplay = function (event) {
+					if(event.item == metadata) {
+						sidebar.sidebarNavInputManager.removeEventListener("projectDisplayed", handleDisplay); //$NON-NLS-0$
+						sidebar.sidebarNavInputManager.dispatchEvent({type:"projectOpened", item: metadata}); //$NON-NLS-0$
+					}
+				};
+				sidebar.sidebarNavInputManager.addEventListener("projectDisplayed", handleDisplay);
 			}
 		}
 		this.editorInputManager.addEventListener("InputChanged", function(event) { //$NON-NLS-0$

@@ -47,17 +47,31 @@ define([
 	Objects.mixin(ASTManager.prototype, /** @lends javascript.ASTManager.prototype */ {
 		/**
 		 * @param {Object} editorContext
+		 * @param {Function} [editorContext.getFileMetadata] A function returning a promise resolving to the
+		 * file metadata.
 		 * @returns {orion.Promise} A promise resolving to the AST.
 		 */
 		getAST: function(editorContext) {
-			if (this.cache) {
-				return new Deferred().resolve(this.cache);
-			}
+			var metadataPromise = (typeof editorContext.getFileMetadata === "function")
+				? editorContext.getFileMetadata()
+				: new Deferred().resolve({});
 			var _self = this;
-			return editorContext.getText().then(function(text) {
-				var ast = _self.parse(text);
-				_self.cache = ast;
-				return ast;
+			return metadataPromise.then(function(metadata) {
+				metadata = metadata || {};
+				var cachedEntry = _self.cache,
+				    fileLocation = metadata.location;
+				if (cachedEntry && cachedEntry.location === fileLocation) {
+//					console.log("Cache hit for " + fileLocation);
+					return new Deferred().resolve(cachedEntry.ast);
+				}
+				return editorContext.getText().then(function(text) {
+					var ast = _self.parse(text);
+					if (typeof fileLocation === "string") {
+//						console.log("Cache store: " + fileLocation);
+						_self.cache = { location: fileLocation, ast: ast };
+					}
+					return ast;
+				});
 			});
 		},
 		/**
@@ -84,6 +98,7 @@ define([
 				this._computeErrorTypes(ast.errors);
 				ast.errors = ast.errors.map(Serialize.serializeError);
 			}
+			ast.source = text;
 			return ast;
 		},
 		/**
@@ -127,10 +142,13 @@ define([
 		},
 		/**
 		 * Notifies the AST manager of a change to the model.
-		 * @param {Object} event
+		 * @param {Object} event An <tt>orion.edit.model</tt> event.
 		 */
-		updated: function(/*event*/) {
-			this.cache = null;
+		updated: function(event) {
+			if (this.cache && this.cache.location === event.file.location) {
+//				console.log("Cache invalidate " + (this.cache && this.cache.location));
+				this.cache = null;
+			}
 		}
 	});
 	return {

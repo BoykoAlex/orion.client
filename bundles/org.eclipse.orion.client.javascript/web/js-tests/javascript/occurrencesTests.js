@@ -65,7 +65,13 @@ define([
 			if(!results) {
 				assert.ok(false, "The occurrence array cannot be null");
 			}
-			assert.equal(results.length, expected.length, "The wrong number of occurrences was returned");
+			var foundOccurrences = '';
+			for (var l=0; l<results.length; l++) {
+				if (results[l]){
+					foundOccurrences += results[l].start + '-' + results[l].end + ', ';
+				}
+			}
+			assert.equal(results.length, expected.length, "The wrong number of occurrences was returned. Expected: " + listOccurrences(expected) + " Returned: " + listOccurrences(results));
 			for(var i = 0; i < expected.length; i++) {
 				//for each expected result try to find it in the results, and remove it if it is found
 				for(var j = 0; j < results.length; j++) {
@@ -79,9 +85,28 @@ define([
 			}
 			for(var k = 0; k < results.length; k++) {
 				if(results[k]) {
-					assert.ok(false, "Found an unknown occurrence: [start "+results[k].start+"][end "+results[k].end+"]");
+					assert.ok(false, "Found an unknown occurrence: [start "+results[k].start+"][end "+results[k].end+"]. Expected: " + listOccurrences(expected) + " Returned: " + listOccurrences(results));
 				}
 			}
+		}
+		
+		/**
+		 * @name getResultsOccurrences
+		 * @description Returns a string listing the found occurrences
+		 * @param results the array results to create the string from
+		 * @returns returns string with list of results
+		 */
+		function listOccurrences(occurrences){
+			var foundOccurrences = '';
+			for (var i=0; i<occurrences.length; i++) {
+				if (occurrences[i]){
+					foundOccurrences += occurrences[i].start + '-' + occurrences[i].end;
+					if (i < (occurrences.length-1)){
+						foundOccurrences += ', ';
+					}
+				}
+			}
+			return foundOccurrences;
 		}
 		
 		/**
@@ -1278,6 +1303,102 @@ define([
 		});
 		
 		/**
+		 * Tests when a redefine happens with occurrences in sibling scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448535
+		 */
+		it('test_redefineSiblingScopes1', function() {
+			editorContext.text = "var reDef; reDef(); function g(){ reDef(); } function reDef(){} function h(){ reDef(); } var reDef;";
+			return occurrences.computeOccurrences(editorContext, setContext(4, 4)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:4, end:9}, {start:11, end:16}, {start:34, end:39}, {start:54, end:59}, {start:78, end:83}, {start:93, end:98}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests when a redefine happens with occurrences in sibling scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448535
+		 */
+		it('test_redefineSiblingScopes2', function() {
+			editorContext.text = "var reDef; reDef(); function g(){ reDef(); } function reDef(){} function h(){ reDef(); } var reDef;";
+			return occurrences.computeOccurrences(editorContext, setContext(11, 12)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:4, end:9}, {start:11, end:16}, {start:34, end:39}, {start:54, end:59}, {start:78, end:83}, {start:93, end:98}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests when a redefine happens with occurrences in sibling scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448535
+		 */
+		it('test_redefineSiblingScopes3', function() {
+			editorContext.text = "var reDef; reDef(); function g(){ reDef(); } function reDef(){} function h(){ reDef(); } var reDef;";
+			return occurrences.computeOccurrences(editorContext, setContext(34, 39)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:4, end:9}, {start:11, end:16}, {start:34, end:39}, {start:54, end:59}, {start:78, end:83}, {start:93, end:98}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests when a redefine happens with occurrences in sibling scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448535
+		 */
+		it('test_redefineSiblingScopes4', function() {
+			editorContext.text = "var reDef; reDef(); function g(){ reDef(); } function reDef(){} function h(){ reDef(); } var reDef;";
+			return occurrences.computeOccurrences(editorContext, setContext(59, 59)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:4, end:9}, {start:11, end:16}, {start:34, end:39}, {start:54, end:59}, {start:78, end:83}, {start:93, end:98}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests when a redefine happens with occurrences in sibling scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448535
+		 */
+		it('test_redefineSiblingScopes5', function() {
+			editorContext.text = "var reDef; reDef(); function g(){ reDef(); } function reDef(){} function h(){ reDef(); } var reDef;";
+			return occurrences.computeOccurrences(editorContext, setContext(78, 78)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:4, end:9}, {start:11, end:16}, {start:34, end:39}, {start:54, end:59}, {start:78, end:83}, {start:93, end:98}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests when a redefine happens with occurrences in sibling scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448535
+		 */
+		it('test_redefineSiblingScopes6', function() {
+			editorContext.text = "var reDef; reDef(); function g(){ reDef(); } function reDef(){} function h(){ reDef(); } var reDef;";
+			return occurrences.computeOccurrences(editorContext, setContext(94, 98)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:4, end:9}, {start:11, end:16}, {start:34, end:39}, {start:54, end:59}, {start:78, end:83}, {start:93, end:98}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
 		 * Tests that occurrences with redefines are only marked inside appropriate scopes
 		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=438317
 		 */
@@ -1378,10 +1499,10 @@ define([
 		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=438317
 		 */
 		it('test_redefineScopesFuncExpr1', function() {
-			editorContext.text = "var a = function reDef() { var b = function reDef(){}; }; reDef();";
+			editorContext.text = "var a = function reDef() { var b = function reDef(){}; };";
 			return occurrences.computeOccurrences(editorContext, setContext(17, 17)).then(function(results) {
 				try {
-					assertOccurrences(results, [{start:17, end:22}, {start:58, end:63}]);
+					assertOccurrences(results, [{start:17, end:22}]);
 				}
 				finally {
 					tearDown();
@@ -1394,7 +1515,7 @@ define([
 		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=438317
 		 */
 		it('test_redefineScopesFuncExpr2', function() {
-			editorContext.text = "var a = function reDef() { var b = function reDef(){}; }; reDef();";
+			editorContext.text = "var a = function reDef() { var b = function reDef(){}; };";
 			return occurrences.computeOccurrences(editorContext, setContext(44, 44)).then(function(results) {
 				try {
 					assertOccurrences(results, [{start:44, end:49}]);
@@ -1407,13 +1528,82 @@ define([
 		
 		/**
 		 * Tests that occurrences with redefines are only marked inside appropriate scopes
-		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=438317
+		 * As the selected 'reDef' isn't defined in the program scope, we assume it belongs to the global scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=447962
 		 */
 		it('test_redefineScopesFuncExpr3', function() {
 			editorContext.text = "var a = function reDef() { var b = function reDef(){}; }; reDef();";
 			return occurrences.computeOccurrences(editorContext, setContext(63, 63)).then(function(results) {
 				try {
-					assertOccurrences(results, [{start:17, end:22}, {start:58, end:63}]);
+					assertOccurrences(results, [{start:58, end:63}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests that occurrences with redefines are only marked inside appropriate scopes
+		 * As the selected 'reDef' isn't defined in the program scope, we assume it belongs to the global scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=447962
+		 */
+		it('test_redefineScopesFuncExprVar1', function() {
+			editorContext.text = "var a = function reDef(){ reDef(); }; var reDef; reDef();";
+			return occurrences.computeOccurrences(editorContext, setContext(17, 17)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:17, end:22}, {start:26, end:31}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests that occurrences with redefines are only marked inside appropriate scopes
+		 * As the selected 'reDef' isn't defined in the program scope, we assume it belongs to the global scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=447962
+		 */
+		it('test_redefineScopesFuncExprVar2', function() {
+			editorContext.text = "var a = function reDef(){ reDef(); }; var reDef; reDef();";
+			return occurrences.computeOccurrences(editorContext, setContext(27, 29)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:17, end:22}, {start:26, end:31}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests that occurrences with redefines are only marked inside appropriate scopes
+		 * As the selected 'reDef' isn't defined in the program scope, we assume it belongs to the global scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=447962
+		 */
+		it('test_redefineScopesFuncExprVar3', function() {
+			editorContext.text = "var a = function reDef(){ reDef(); }; var reDef; reDef();";
+			return occurrences.computeOccurrences(editorContext, setContext(47, 47)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:42, end:47}, {start:49, end:54}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests that occurrences with redefines are only marked inside appropriate scopes
+		 * As the selected 'reDef' isn't defined in the program scope, we assume it belongs to the global scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=447962
+		 */
+		it('test_redefineScopesFuncExprVar4', function() {
+			editorContext.text = "var a = function reDef(){ reDef(); }; var reDef; reDef();";
+			return occurrences.computeOccurrences(editorContext, setContext(49, 54)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:42, end:47}, {start:49, end:54}]);
 				}
 				finally {
 					tearDown();
@@ -2001,6 +2191,214 @@ define([
 		});
 		
 		/**
+		 * Tests computing occurrences for a named func expression inside an object property (and that params are skipped)
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439641
+		 */
+		it('test_object_properties_named_expressions1', function() {
+			editorContext.text = "var a={ f: function f(p1, p2) {}, g: function g() { this.f(); } }; f();";
+			return occurrences.computeOccurrences(editorContext, setContext(9, 9)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:8, end:9}, {start:20, end:21}, {start:57, end:58}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for a named func expression inside an object property (and that params are skipped)
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439641
+		 */
+		it('test_object_properties_named_expressions2', function() {
+			editorContext.text = "var a={ f: function f(p1, p2) {}, g: function g() { this.f(); } }; f();";
+			return occurrences.computeOccurrences(editorContext, setContext(20, 20)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:8, end:9}, {start:20, end:21}, {start:57, end:58}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for a named func expression inside an object property (and that params are skipped)
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439641
+		 */
+		it('test_object_properties_named_expressions3', function() {
+			editorContext.text = "var a={ f: function f(p1, p2) {}, g: function g() { this.f(); } }; f();";
+			return occurrences.computeOccurrences(editorContext, setContext(57, 58)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:8, end:9}, {start:20, end:21}, {start:57, end:58}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for a named func expression inside an object property (and that params are skipped)
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439641
+		 */
+		it('test_object_properties_named_expressions4', function() {
+			editorContext.text = "var a={ f: function f(p1, p2) {p1++;}, g: function g() { this.f(); } }; f();";
+			return occurrences.computeOccurrences(editorContext, setContext(23, 23)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:22, end:24}, {start:31, end:33}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in two sibling scopes and defined in an outside scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsSiblingScopes1', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(31, 32)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:31, end:32}, {start:54, end:55}, {start:80, end:81}, {start:91, end:92}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in two sibling scopes and defined in an outside scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsSiblingScopes2', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(54, 54)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:31, end:32}, {start:54, end:55}, {start:80, end:81}, {start:91, end:92}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in two sibling scopes and defined in an outside scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsSiblingScopes3', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(80, 80)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:31, end:32}, {start:54, end:55}, {start:80, end:81}, {start:91, end:92}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in two sibling scopes and defined in an outside scope
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsSiblingScopes4', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(91, 92)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:31, end:32}, {start:54, end:55}, {start:80, end:81}, {start:91, end:92}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in sibling scopes and defined in multiple nested scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsNestedScopes1', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); g: function (){} }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(31, 32)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:31, end:32}, {start:97, end:98}, {start:108, end:109}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});	
+		
+		/**
+		 * Tests computing occurrences for object property used in sibling scopes and defined in multiple nested scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsNestedScopes2', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); g: function (){} }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(97, 97)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:31, end:32}, {start:97, end:98}, {start:108, end:109}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in sibling scopes and defined in multiple nested scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsNestedScopes3', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); g: function (){} }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(109, 109)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:31, end:32}, {start:97, end:98}, {start:108, end:109}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in sibling scopes and defined in multiple nested scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsNestedScopes4', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); g: function (){} }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(54, 55)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:54, end:55}, {start:59, end:60}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests computing occurrences for object property used in sibling scopes and defined in multiple nested scopes
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=439156
+		 */
+		it('test_ObjectPropsNestedScopes5', function() {
+			editorContext.text = "var a = { f: function (){ this.g(); var b = { p: this.g(); g: function (){} }; var c = { p: this.g(); }; }, g: function (){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(59, 59)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:54, end:55}, {start:59, end:60}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
 		 * Tests whether occurrences finds and selects the correct token/word/node
 		 */
 		it('test_punctuators_1A', function() {
@@ -2068,7 +2466,7 @@ define([
 			editorContext.text = "var a; log(a); var x = function a(){ log(a); var y = function a(){ log(a); }; };";
 			return occurrences.computeOccurrences(editorContext, setContext(11, 11)).then(function(results) {
 				try {
-					assertOccurrences(results, [{start:4, end:5}, {start:11, end:12},  {start:32, end:33}]);
+					assertOccurrences(results, [{start:4, end:5}, {start:11, end:12}]);
 				}
 				finally {
 					tearDown();
@@ -2084,7 +2482,7 @@ define([
 			editorContext.text = "var a; log(a); var x = function a(){ log(a); var y = function a(){ log(a); }; };";
 			return occurrences.computeOccurrences(editorContext, setContext(32, 32)).then(function(results) {
 				try {
-					assertOccurrences(results, [{start:4, end:5}, {start:11, end:12},  {start:32, end:33}]);
+					assertOccurrences(results, [{start:32, end:33}, {start:41, end:42}]);
 				}
 				finally {
 					tearDown();
@@ -2100,7 +2498,7 @@ define([
 			editorContext.text = "var a; log(a); var x = function a(){ log(a); var y = function a(){ log(a); }; };";
 			return occurrences.computeOccurrences(editorContext, setContext(41, 42)).then(function(results) {
 				try {
-					assertOccurrences(results, [{start:41, end:42}, {start:62, end:63}, {start:71, end:72}]);
+					assertOccurrences(results, [{start:32, end:33}, {start:41, end:42}]);
 				}
 				finally {
 					tearDown();
@@ -2117,7 +2515,7 @@ define([
 			editorContext.text = "var a; log(a); var x = function a(){ log(a); var y = function a(){ log(a); }; };";
 			return occurrences.computeOccurrences(editorContext, setContext(63, 63)).then(function(results) {
 				try {
-					assertOccurrences(results, [{start:41, end:42}, {start:62, end:63}, {start:71, end:72}]);
+					assertOccurrences(results, [{start:62, end:63}, {start:71, end:72}]);
 				}
 				finally {
 					tearDown();
@@ -2133,7 +2531,7 @@ define([
 			editorContext.text = "var a; log(a); var x = function a(){ log(a); var y = function a(){ log(a); }; };";
 			return occurrences.computeOccurrences(editorContext, setContext(72, 72)).then(function(results) {
 				try {
-					assertOccurrences(results, [{start:41, end:42}, {start:62, end:63}, {start:71, end:72}]);
+					assertOccurrences(results, [{start:62, end:63}, {start:71, end:72}]);
 				}
 				finally {
 					tearDown();
@@ -2508,5 +2906,236 @@ define([
 				}
 			});
 		});
+		
+		/**
+		 * Tests usage inside of a non-defining scope
+		 * Everything should be marked, no matter which is selected
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=445410
+		 */
+		it('test_nonDefiningScope1', function() {
+			editorContext.text = "f(); function g(){ f(); } function f(){} function h(){ f(); } f();";
+			return occurrences.computeOccurrences(editorContext, setContext(1,1)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:0, end:1}, {start:19, end:20}, {start: 35, end: 36}, {start: 55, end: 56}, {start: 62, end: 63}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests usage inside of a non-defining scope
+		 * Everything should be marked, no matter which is selected
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=445410
+		 */
+		it('test_nonDefiningScope2', function() {
+			editorContext.text = "f(); function g(){ f(); } function f(){} function h(){ f(); } f();";
+			return occurrences.computeOccurrences(editorContext, setContext(20,20)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:0, end:1}, {start:19, end:20}, {start: 35, end: 36}, {start: 55, end: 56}, {start: 62, end: 63}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests usage inside of a non-defining scope
+		 * Everything should be marked, no matter which is selected
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=445410
+		 */
+		it('test_nonDefiningScope3', function() {
+			editorContext.text = "f(); function g(){ f(); } function f(){} function h(){ f(); } f();";
+			return occurrences.computeOccurrences(editorContext, setContext(35,35)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:0, end:1}, {start:19, end:20}, {start: 35, end: 36}, {start: 55, end: 56}, {start: 62, end: 63}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests usage inside of a non-defining scope
+		 * Everything should be marked, no matter which is selected
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=445410
+		 */
+		it('test_nonDefiningScope4', function() {
+			editorContext.text = "f(); function g(){ f(); } function f(){} function h(){ f(); } f();";
+			return occurrences.computeOccurrences(editorContext, setContext(55,55)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:0, end:1}, {start:19, end:20}, {start: 35, end: 36}, {start: 55, end: 56}, {start: 62, end: 63}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests usage inside of a non-defining scope
+		 * Everything should be marked, no matter which is selected
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=445410
+		 */
+		it('test_nonDefiningScope5', function() {
+			editorContext.text = "f(); function g(){ f(); } function f(){} function h(){ f(); } f();";
+			return occurrences.computeOccurrences(editorContext, setContext(62,63)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:0, end:1}, {start:19, end:20}, {start: 35, end: 36}, {start: 55, end: 56}, {start: 62, end: 63}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests usage inside of a non-defining scope and that it doesn't conflict with the global occurrence list
+		 * Everything should be marked, no matter which is selected
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=445410
+		 */
+		it('test_nonDefiningScopeNonGlobal', function() {
+			editorContext.text = "function a() { f(); function g(){ f(); } function f(){} function h(){ f(); } f(); }";
+			return occurrences.computeOccurrences(editorContext, setContext(78,78)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:15, end:16}, {start:34, end:35}, {start: 50, end: 51}, {start: 70, end: 71}, {start: 77, end: 78}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp1', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(4,4)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:4, end:5}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp2', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(9,10)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:9, end:10}, {start:21, end:22}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp3', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(32,32)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:30, end:34}, {start:43, end:47}, {start: 73, end: 77}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp4', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(75,83)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:30, end:34}, {start:43, end:47}, {start: 73, end: 77}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp5', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(48,49)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:48, end:49}, {start:78, end:79}, {start: 88, end: 89}, {start: 100, end: 101}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp6', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(78,78)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:48, end:49}, {start:78, end:79}, {start: 88, end: 89}, {start: 100, end: 101}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp7', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(88,88)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:48, end:49}, {start:78, end:79}, {start: 88, end: 89}, {start: 100, end: 101}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
+		/**
+		 * Tests selections inside member expressions and whether they should be object property checks
+		 * @see https://bugs.eclipse.org/bugs/show_bug.cgi?id=448543
+		 */
+		it('test_memberExpressionAsObjectProp8', function() {
+			editorContext.text = "var a = {a: function a(){ var that = this; that.b(); return function() { that.b(); } }, b: function b(){} };";
+			return occurrences.computeOccurrences(editorContext, setContext(100,101)).then(function(results) {
+				try {
+					assertOccurrences(results, [{start:48, end:49}, {start:78, end:79}, {start: 88, end: 89}, {start: 100, end: 101}]);
+				}
+				finally {
+					tearDown();
+				}
+			});
+		});
+		
 	});
 });

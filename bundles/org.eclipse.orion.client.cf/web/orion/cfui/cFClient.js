@@ -10,7 +10,7 @@
  ******************************************************************************/
 
 /*eslint-env browser, amd*/
-define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(require, xhr, Deferred, operation) {
+define(['i18n!cfui/nls/messages', 'require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(messages, require, xhr, Deferred, operation) {
 
 	var eclipse = eclipse || {};
 	
@@ -68,7 +68,7 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 					json = JSON.parse(response.responseText);
 				} catch (e) {
 					json = { 
-						Message : "Problem while performing the action"
+						Message : messages["problemWhilePerformingTheAction"]
 					};
 				}
 				json.HttpCode = response.status;
@@ -125,7 +125,7 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 			getLogs: function(target, applicationName, logFileName, instance){
 				if(!applicationName){
 					var deferred = new Deferred();
-					deferred.reject("Application name not set");
+					deferred.reject(messages["applicationNameNotSet"]);
 				}
 				var location = require.toUrl("cfapi/logs/" + applicationName);
 				if(logFileName){
@@ -150,7 +150,7 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 			
 			// Apps CF v2 operations
 			
-			pushApp: function(target, name, contentLocation, manifest, saveManifest) {
+			pushApp: function(target, name, contentLocation, manifest, saveManifest, packager, instrumentation) {
 				var pushReq = {};
 				
 				if (name)
@@ -167,6 +167,12 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 				
 				if(saveManifest)
 					pushReq.Persist = saveManifest;
+				
+				if(packager)
+					pushReq.Packager = packager;
+				
+				if(instrumentation)
+					pushReq.Instrumentation = instrumentation;
 				
 				return this._xhrV1("PUT", require.toUrl("cfapi/apps"), pushReq);
 			},
@@ -324,7 +330,7 @@ define(['require', 'orion/xhr', 'orion/Deferred', 'orion/operation'], function(r
 			getLogz: function(target, appName){
 				if(!appName){
 					var deferred = new Deferred();
-					deferred.reject("App name is missing");
+					deferred.reject(messages["appNameIsMissing"]);
 				}
 				var url = require.toUrl("cfapi/logz/" + appName);
 				if(target){

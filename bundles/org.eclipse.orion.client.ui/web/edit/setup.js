@@ -179,7 +179,7 @@ exports.setUpEditor = function(serviceRegistry, pluginRegistry, preferences, isR
 		searcher = new mSearchClient.Searcher({serviceRegistry: serviceRegistry, commandService: commandRegistry, fileService: fileClient});
 		blameService = new mBlameAnnotation.BlameService(serviceRegistry);
 	}());
-
+	
 	var sidebarDomNode = lib.node("sidebar"), //$NON-NLS-0$
 		sidebarToolbar = lib.node("sidebarToolbar"), //$NON-NLS-0$
 		pageToolbar = lib.node("pageToolbar"), //$NON-NLS-0$
@@ -231,7 +231,7 @@ exports.setUpEditor = function(serviceRegistry, pluginRegistry, preferences, isR
 		if (type === "progress") { //$NON-NLS-0$
 			statusService.setProgressMessage(message);
 		} else if (type === "error") { //$NON-NLS-0$
-			statusService.setErrorMessage(message);
+			statusService.setErrorMessage({Message: message, Severity: "Error"}); //$NON-NLS-0$
 		} else {
 			statusService.setMessage(message, null, isAccessible);
 		}

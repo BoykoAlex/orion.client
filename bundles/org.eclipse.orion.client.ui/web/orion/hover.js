@@ -28,11 +28,10 @@ define ([
 			var hoverInfo = [];
 			this.hoverFactory._applicableProviders.forEach(function(provider) {
 				var providerImpl = this.serviceRegistry.getService(provider);
-				if (providerImpl.computeHoverInfo) {
+				if (providerImpl && providerImpl.computeHoverInfo) {
 					var editorContext = EditorContext.getEditorContext(this.serviceRegistry);
 					var promise = providerImpl.computeHoverInfo(editorContext, context);
-					hoverInfo.push({title: provider._properties.tipTitle,
-									promise: promise,
+					hoverInfo.push({promise: promise,
 									renderMarkDown: renderMarkDown});
 				}
 			}.bind(this));
@@ -69,7 +68,7 @@ define ([
 				var providerRef = infoProviders[i];
 				var contentType = this.inputManager.getContentType();
 				if (providerRef._properties.contentType && contentType) {
-					var validTypes = providerRef._properties.contentType;
+					var validTypes = providerRef.getProperty('contentType');
 					if (validTypes.indexOf(contentType.id) !== -1) {
 						this._applicableProviders.push(providerRef);
 					}

@@ -10,11 +10,11 @@
  ******************************************************************************/
 /*global parent window document define orion setTimeout*/
 
-define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred', 'orion/cfui/cFClient', 'orion/PageUtil', 'orion/selection',
-	'orion/URITemplate', 'orion/PageLinks', 'orion/preferences', 'orion/fileClient', 'cfui/cfUtil', 'cfui/plugins/wizards/common/wizardUtils', 'orion/objects', 'orion/widgets/input/ComboTextInput',
+define(['i18n!cfui/nls/messages', "orion/bootstrap", 'orion/cfui/cFClient', 'orion/PageUtil',
+	'orion/PageLinks', 'orion/preferences', 'orion/fileClient', 'cfui/cfUtil', 'cfui/plugins/wizards/common/wizardUtils',
 	'orion/webui/Wizard', 'cfui/plugins/wizards/common/deploymentLogic', 'cfui/plugins/wizards/common/commonPaneBuilder', 'cfui/plugins/wizards/common/corePageBuilder', 
 	'cfui/plugins/wizards/common/servicesPageBuilder', 'cfui/plugins/wizards/common/additionalParamPageBuilder'], 
-		function(mBootstrap, xhr, lib, Deferred, CFClient, PageUtil, mSelection, URITemplate, PageLinks, Preferences, mFileClient, mCfUtil, mWizardUtils, objects, ComboTextInput, Wizard,
+		function(messages, mBootstrap, CFClient, PageUtil, PageLinks, Preferences, mFileClient, mCfUtil, mWizardUtils, Wizard,
 				mDeploymentLogic, mCommonPaneBuilder, mCorePageBuilder, mServicesPageBuilder, mAdditionalParamPageBuilder) {
 	
 	/* plugin-host communication */
@@ -31,7 +31,7 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 	mBootstrap.startup().then(function(core) {
 		
 		/* set up initial message */
-		document.getElementById('title').appendChild(document.createTextNode("Configure Application Deployment")); //$NON-NLS-1$//$NON-NLS-0$
+		document.getElementById('title').appendChild(document.createTextNode(messages["configureApplicationDeployment"])); //$NON-NLS-0$
 		
 		/* allow the frame to be closed */
 		document.getElementById('closeDialog').addEventListener('click', closeFrame); //$NON-NLS-1$ //$NON-NLS-0$
@@ -66,7 +66,7 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 			hideMessage : hideMessage,
 			showError : showError,
 			render : function(fields){
-				document.getElementById('messageText').appendChild(fields);
+				document.getElementById('messageText').appendChild(fields); //$NON-NLS-0$
 			}
 		});
 		
@@ -74,15 +74,16 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 		var plan = resource.Plan;
 		var manifestApplication = plan.Manifest.applications[0];
 		
-		Deferred.all([
-		     
-		     mCfUtil.getTargets(preferences),
-		     mWizardUtils.getDefaultTarget(fileClient, resource)
-		     
-		]).then(function(results){
+		mWizardUtils.loadClouds({
+			showMessage : showMessage,
+			hideMessage : hideMessage,
+			preferences : preferences,
+			fileClient : fileClient,
+			resource : resource
+		}).then(function(resp){
 			
-			var clouds = results[0];
-			var defaultTarget = results[1];
+			var clouds = resp.clouds;
+			var defaultTarget = resp.defaultTarget;
 			
 			/* init common pane builder */
 			var commonPaneBuilder = new mCommonPaneBuilder.CommonPaneBuilder({
@@ -130,13 +131,13 @@ define(["orion/bootstrap", "orion/xhr", 'orion/webui/littlelib', 'orion/Deferred
 		    var page2 = servicesPageBuilder.build();
 		    var page3 = additionalParamPageBuilder.build();
 		    
-			var wizard = new Wizard.Wizard({
-				parent: "wizard",
+			new Wizard.Wizard({
+				parent: "wizard", //$NON-NLS-0$
 				pages: [page1, page2, page3],
 				commonPane: commonPane,
 				onCancel: closeFrame,
-				buttonNames: { ok: "Deploy" },
-				size: { width: "420px", height: "180px" },
+				buttonNames: { ok: messages["deploy"] },
+				size: { width: "420px", height: "180px" }, //$NON-NLS-0$//$NON-NLS-1$
 				onSubmit: mDeploymentLogic.buildDeploymentTrigger({
 					
 					showMessage : showMessage,

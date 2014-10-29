@@ -53,6 +53,22 @@
 	height: calc(100% - 30px);
 }
 
+.gitPushUpdates {
+	border-spacing: 10px;
+}
+
+.gitPushMessage {
+	margin-left: 20px;
+	margin-top: 0;
+}
+
+.gitPushResult {
+	width: 100%;
+	text-align: left;
+	margin: 0;
+	white-space: pre;
+}
+
 .sectionDropdownArrow {
 	margin-left: 3px;
 	margin-top: 2px;
@@ -127,7 +143,7 @@
 	margin-bottom: 0;
 	background-color: #fcfcfc;
 	height: calc(100% - 45px);
-	overflow-y: auto;
+	overflow: auto;
 }
 
 .sidebar .selectionModelContainer {
@@ -418,19 +434,11 @@ table .sectionTable {
 	opacity: 1;
 }
 
-.gitCommitListMore {
+.gitListMore {
 	text-align: center;
 	font-size: 10pt;
 	font-weight: bold;
 	padding: 10px;
-}
-
-.gitTagListMore {
-	text-align: center;
-	font-size: 10pt;
-	font-weight: bold;
-	color: gray;
-	padding: 6px;
 }
 
 .gitCommitMessage .gitCommitMessageExplorerRow {

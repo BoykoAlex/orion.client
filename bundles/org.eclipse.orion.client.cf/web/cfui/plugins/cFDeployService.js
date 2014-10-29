@@ -11,9 +11,9 @@
 
 /*eslint-env browser,amd*/
 
-define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil', 'orion/URITemplate', 'orion/serviceregistry', 
-        'orion/preferences', 'orion/PageLinks', 'orion/xhr'],
-        function(mBootstrap, Deferred, CFClient, mCfUtil, URITemplate, ServiceRegistry, mPreferences, PageLinks, xhr){
+define(['i18n!cfui/nls/messages', 'orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil', 'orion/URITemplate', 'orion/serviceregistry', 
+        'orion/preferences', 'orion/PageLinks', 'orion/xhr', 'orion/i18nUtil'],
+        function(messages, mBootstrap, Deferred, CFClient, mCfUtil, URITemplate, ServiceRegistry, mPreferences, PageLinks, xhr, i18Util){
 	
 	var deferred = new Deferred();
 	mBootstrap.startup().then(function(core){
@@ -85,7 +85,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 			},
 			
 			getDeployProgressMessage: function(project, launchConf){
-				var message = "Deploying application to Cloud Foundry: ";
+				var message = messages["deployingApplicationToCloudFoundry:"];
 				if(launchConf.ConfigurationName){
 					return message + " " + launchConf.ConfigurationName;
 				}
@@ -94,13 +94,13 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 				if(!appName){
 					var manifestFolder = params.AppPath || "";
 					manifestFolder = manifestFolder.substring(0, manifestFolder.lastIndexOf("/")+1);
-					appName = "application from /" + manifestFolder + "manifest.yml";
+					appName = messages["applicationFrom/"] + manifestFolder + "manifest.yml";
 				}
 				
 				message += appName;
 				
 				if(params.Target){
-					message += " on " + params.Target.Space + " / " + params.Target.Org;
+					message += messages["on"] + params.Target.Space + " / " + params.Target.Org;
 				}
 				
 				return message;
@@ -125,7 +125,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 							that._deploy(project, target, appName, appPath, deferred);
 						}, function(error){
 							error.Retry = {
-								parameters: [{id: "user", type: "text", name: "User:"}, {id: "password", type: "password", name: "Password:"}]
+								parameters: [{id: "user", type: "text", name: messages["user:"]}, {id: "password", type: "password", name: messages["password:"]}]
 							};
 							deferred.reject(error);
 						}
@@ -141,10 +141,14 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 				if (target && appName){
 					cFService.pushApp(target, appName, decodeURIComponent(project.ContentLocation + appPath)).then(
 						function(result){
-							
 							var editLocation = new URL("../edit/edit.html#" + project.ContentLocation, window.location.href);
-							deferred.resolve(mCfUtil.prepareLaunchConfigurationContent(result, appPath, editLocation));
-							
+							mCfUtil.prepareLaunchConfigurationContent(result, appPath, editLocation, project.ContentLocation).then(
+								function(launchConfigurationContent){
+									deferred.resolve(launchConfigurationContent);
+								}, function(error){
+									deferred.reject(error);
+								}
+							);
 						}, function(error){
 							if (error.HttpCode === 404){
 								deferred.resolve({
@@ -155,7 +159,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 								var err = error.JsonData;
 								if (err.error_code === "CF-InvalidAuthToken" || err.error_code === "CF-NotAuthenticated"){
 									error.Retry = {
-										parameters: [{id: "user", type: "text", name: "User:"}, {id: "password", type: "password", name: "Password:"}]
+										parameters: [{id: "user", type: "text", name: messages["user:"]}, {id: "password", type: "password", name: messages["password:"]}]
 									};
 								}
 								deferred.reject(error);
@@ -166,56 +170,64 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 					);
 				} else {
 					
-					/* find out if any deployment wizards are plugged in */
+					/* Note, that there's at least one deployment wizard present */
 					var wizardReferences = serviceRegistry.getServiceReferences("orion.project.deploy.wizard");
-					if(wizardReferences.length === 0){
 						
-						/* old-style interactive deploy */
-						deferred.resolve({UriTemplate: "{+OrionHome}/cfui/deployInteractive.html#" + encodeURIComponent(JSON.stringify({ContentLocation: project.ContentLocation, AppPath: appPath})), 
-							Width: "450px", 
-							Height: "350px",
-							UriTemplateId: "org.eclipse.orion.client.cf.deploy.uritemplate"});
+					/* figure out which deployment plan & wizard to use */
+					var relativeFilePath = new URL(project.ContentLocation).href;
+					var orionHomeUrl = new URL(PageLinks.getOrionHome());
 						
-					} else {
+					if(relativeFilePath.indexOf(orionHomeUrl.origin) === 0)
+						relativeFilePath = relativeFilePath.substring(orionHomeUrl.origin.length);
 						
-						/* figure out which deployment plan & wizard to use */
-						var relativeFilePath = new URL(project.ContentLocation).href;
-						var orionHomeUrl = new URL(PageLinks.getOrionHome());
+					if(relativeFilePath.indexOf(orionHomeUrl.pathname) === 0)
+						relativeFilePath = relativeFilePath.substring(orionHomeUrl.pathname.length);
 						
-						if(relativeFilePath.indexOf(orionHomeUrl.origin) === 0)
-							relativeFilePath = relativeFilePath.substring(orionHomeUrl.origin.length);
-						
-						if(relativeFilePath.indexOf(orionHomeUrl.pathname) === 0)
-							relativeFilePath = relativeFilePath.substring(orionHomeUrl.pathname.length);
-						
-						cFService.getDeploymentPlans(relativeFilePath).then(function(resp){
-							var plans = resp.Children;
+					cFService.getDeploymentPlans(relativeFilePath).then(function(resp){
+						var plans = resp.Children;
 							
-							/* find feasible deployments */
-							var feasibleDeployments = [];
-							plans.forEach(function(plan){
+						/* find feasible deployments */
+						var feasibleDeployments = [];
+						plans.forEach(function(plan){
 								
-								var wizard;
-								wizardReferences.forEach(function(ref){
-									if(ref.getProperty("id") === plan.Wizard && !wizard)
-										wizard = ref;
+							var wizard;
+							wizardReferences.forEach(function(ref){
+								if(ref.getProperty("id") === plan.Wizard && !wizard)
+									wizard = ref;
+							});
+								
+							if(wizard){
+								feasibleDeployments.push({
+									wizard : serviceRegistry.getService(wizard),
+									plan : plan
 								});
+							}
+						});
+							
+						var nonGenerics = feasibleDeployments.filter(function(deployment){
+							return deployment.plan.ApplicationType !== "generic";
+						});
+							
+						/* single deployment scenario */
+						if(feasibleDeployments.length === 1){
+							var deployment = feasibleDeployments[0];
+							deployment.wizard.getInitializationParameters().then(function(initParams){
+								deferred.resolve({
+									UriTemplate : initParams.LocationTemplate + "#" + encodeURIComponent(JSON.stringify({
+										ContentLocation: project.ContentLocation,
+										AppPath: appPath,
+										Plan: deployment.plan
+									})),
+									Width : initParams.Width,
+									Height : initParams.Height,
+									UriTemplateId: "org.eclipse.orion.client.cf.deploy.uritemplate"
+								});
+							});
+						} else {
 								
-								if(wizard){
-									feasibleDeployments.push({
-										wizard : serviceRegistry.getService(wizard),
-										plan : plan
-									});
-								}
-							});
-							
-							var nonGenerics = feasibleDeployments.filter(function(deployment){
-								return deployment.plan.ApplicationType !== "generic";
-							});
-							
-							/* single deployment scenario */
-							if(feasibleDeployments.length === 1){
-								var deployment = feasibleDeployments[0];
+							if(nonGenerics[0].plan.Required.length === 0){
+								/* multiple deployment scenarios, but a single non-generic */
+								var deployment = nonGenerics[0];
 								deployment.wizard.getInitializationParameters().then(function(initParams){
 									deferred.resolve({
 										UriTemplate : initParams.LocationTemplate + "#" + encodeURIComponent(JSON.stringify({
@@ -228,54 +240,30 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 										UriTemplateId: "org.eclipse.orion.client.cf.deploy.uritemplate"
 									});
 								});
-							} else if(nonGenerics.length === 1) {
-								
-								if(nonGenerics[0].plan.Required.length === 0){
-									/* multiple deployment scenarios, but a single non-generic */
-									var deployment = nonGenerics[0];
-									deployment.wizard.getInitializationParameters().then(function(initParams){
-										deferred.resolve({
-											UriTemplate : initParams.LocationTemplate + "#" + encodeURIComponent(JSON.stringify({
-												ContentLocation: project.ContentLocation,
-												AppPath: appPath,
-												Plan: deployment.plan
-											})),
-											Width : initParams.Width,
-											Height : initParams.Height,
-											UriTemplateId: "org.eclipse.orion.client.cf.deploy.uritemplate"
-										});
-									});
-								} else {
-									/* TODO: Support this case in wizards */
-									var generic;
-									feasibleDeployments.forEach(function(deployment){
-										if(deployment.plan.ApplicationType === "generic" && !generic)
-											generic = deployment;
-									});
-									
-									deployment.wizard.getInitializationParameters().then(function(initParams){
-										deferred.resolve({
-											UriTemplate : initParams.LocationTemplate + "#" + encodeURIComponent(JSON.stringify({
-												ContentLocation: project.ContentLocation,
-												AppPath: appPath,
-												Plan: deployment.plan
-											})),
-											Width : initParams.Width,
-											Height : initParams.Height,
-											UriTemplateId: "org.eclipse.orion.client.cf.deploy.uritemplate"
-										});
-									});
-								}
 							} else {
+								/* TODO: Support this case in wizards */
+								var generic;
+								feasibleDeployments.forEach(function(deployment){
+									if(deployment.plan.ApplicationType === "generic" && !generic)
+										generic = deployment;
+								});
 								
-								/* old-style interactive deploy */
-								deferred.resolve({UriTemplate: "{+OrionHome}/cfui/deployInteractive.html#" + encodeURIComponent(JSON.stringify({ContentLocation: project.ContentLocation, AppPath: appPath})), 
-									Width: "400px", 
-									Height: "350px",
-									UriTemplateId: "org.eclipse.orion.client.cf.deploy.uritemplate"});
+								var deployment = generic;
+								deployment.wizard.getInitializationParameters().then(function(initParams){
+									deferred.resolve({
+										UriTemplate : initParams.LocationTemplate + "#" + encodeURIComponent(JSON.stringify({
+											ContentLocation: project.ContentLocation,
+											AppPath: appPath,
+											Plan: deployment.plan
+										})),
+										Width : initParams.Width,
+										Height : initParams.Height,
+										UriTemplateId: "org.eclipse.orion.client.cf.deploy.uritemplate"
+									});
+								});
 							}
-						});
-					}
+						}
+					});
 				}
 			},
 				
@@ -289,7 +277,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 							func(props, deferred);
 						}, function(error){
 							error.Retry = {
-								parameters: [{id: "user", type: "text", name: "User:"}, {id: "password", type: "password", name: "Password:"}]
+								parameters: [{id: "user", type: "text", name: messages["user:"]}, {id: "password", type: "password", name: messages["password:"]}]
 							};
 							deferred.reject(error);
 						}
@@ -311,7 +299,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 							var app = result;
 							deferred.resolve({
 								State: (app.running_instances > 0 ? "STARTED": "STOPPED"),
-								Message: app.running_instances + " of " + app.instances + " instance(s) running"
+								Message: app.running_instances + messages["of"] + app.instances + messages["instance(s)Running"]
 							});
 						}, function(error){
 							if (error.HttpCode === 404){
@@ -323,7 +311,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 								var err = error.JsonData;
 								if (err.error_code === "CF-InvalidAuthToken" || err.error_code === "CF-NotAuthenticated"){
 									error.Retry = {
-										parameters: [{id: "user", type: "text", name: "User:"}, {id: "password", type: "password", name: "Password:"}]
+										parameters: [{id: "user", type: "text", name: messages["user:"]}, {id: "password", type: "password", name: messages["password:"]}]
 									};
 								}
 								deferred.reject(error);
@@ -356,7 +344,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 								var err = error.JsonData;
 								if (err.error_code === "CF-InvalidAuthToken" || err.error_code === "CF-NotAuthenticated"){
 									error.Retry = {
-										parameters: [{id: "user", type: "text", name: "User:"}, {id: "password", type: "password", name: "Password:"}]
+										parameters: [{id: "user", type: "text", name: messages["user:"]}, {id: "password", type: "password", name: messages["password:"]}]
 									};
 								}
 								deferred.reject(error);
@@ -380,7 +368,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 							var app = result.entity;
 							deferred.resolve({
 								State: (app.state === "STARTED" ? "STARTED" : "STOPPED"),
-								Message: "Application is not running"
+								Message: messages["applicationIsNotRunning"]
 							});
 						}, function(error){
 							if (error.HttpCode === 404){
@@ -392,7 +380,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 								var err = error.JsonData;
 								if (err.error_code === "CF-InvalidAuthToken" || err.error_code === "CF-NotAuthenticated"){
 									error.Retry = {
-										parameters: [{id: "user", type: "text", name: "User:"}, {id: "password", type: "password", name: "Password:"}]
+										parameters: [{id: "user", type: "text", name: messages["user:"]}, {id: "password", type: "password", name: messages["password:"]}]
 									};
 								}
 								deferred.reject(error);
@@ -419,7 +407,7 @@ define(['orion/bootstrap', 'orion/Deferred', 'orion/cfui/cFClient', 'cfui/cfUtil
 				}
 				return {
 					State: (runningInstances > 0 ? "STARTED": "STOPPED"),
-					Message: runningInstances + "/" + instances + " instance(s) running" + (flappingInstances > 0 ? " : " + flappingInstances  + " flapping" : "")
+					Message: flappingInstances > 0 ?  i18Util.formatMessage(messages["${0}/${1}Instance(s)Running,${2}Flapping"], runningInstances, instances, flappingInstances) : i18Util.formatMessage(messages["${0}/${1}Instance(s)Running"], runningInstances, instances)
 				};
 			}
 		};

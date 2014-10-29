@@ -65,10 +65,8 @@ define([
 		this.fromDateQuery = "";
 		this.toDateQuery = "";
 	}
-	GitCommitListModel.prototype = Object.create(mExplorer.Explorer.prototype);
+	GitCommitListModel.prototype = Object.create(mExplorer.ExplorerModel.prototype);
 	objects.mixin(GitCommitListModel.prototype, /** @lends orion.git.GitCommitListModel.prototype */ {
-		destroy: function(){
-		},
 		getRoot: function(onItem){
 			onItem(this.root);
 		},
@@ -147,7 +145,7 @@ define([
 				return this.targetRef;
 			}
 			var ref = this.currentBranch;
-			return ref && ref.RemoteLocation[0] && ref.RemoteLocation[0].Children[ref.RemoteLocation[0].Children.length - 1];
+			return ref && ref.RemoteLocation &&  ref.RemoteLocation[0] && ref.RemoteLocation[0].Children[ref.RemoteLocation[0].Children.length - 1];
 		},
 		tracksRemoteBranch: function(){
 			if (this.targetRef) {
@@ -1011,7 +1009,7 @@ define([
 				var td = document.createElement("td"); //$NON-NLS-0$
 
 				if (item.Type === "MoreCommits") { //$NON-NLS-1$ //$NON-NLS-0$
-					td.classList.add("gitCommitListMore"); //$NON-NLS-0$
+					td.classList.add("gitListMore"); //$NON-NLS-0$
 					var ref = model.simpleLog ? model.getTargetReference() : model.getActiveBranch();
 					var moreText;
 					if (item.parent.Type === "Incoming" || item.parent.Type === "Outgoing") { //$NON-NLS-1$ //$NON-NLS-0$
@@ -1029,7 +1027,10 @@ define([
 						moreButton.textContent = i18nUtil.formatMessage(messages[item.Type + "Progress"], ref ? ref.Name : model.root.Name);
 						item.parent.location = item.NextLocation;
 						item.parent.more = true;
+						var offsetParent = lib.getOffsetParent(td);
+						var scrollTop = offsetParent ? offsetParent.scrollTop : 0;
 						explorer.changedItem(item.parent).then(function() {
+							if (offsetParent) offsetParent.scrollTop = scrollTop;
 							item.parent.more = false;
 						});
 					});

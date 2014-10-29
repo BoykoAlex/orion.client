@@ -344,9 +344,11 @@ var exports = {};
 			}
 		});
 		commandService.addCommand(removeRemoteBranchCommand);
-
-		var addRemoteParameters = new mCommandRegistry.ParametersDescription([new mCommandRegistry.CommandParameter('name', 'text', messages['Name:']),  //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
-		                                                               		new mCommandRegistry.CommandParameter('url', 'url', messages['URL:'])]); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+	
+		var addRemoteParameters = new mCommandRegistry.ParametersDescription([
+			new mCommandRegistry.CommandParameter('name', 'text', messages['Name:'],null,null,null,function(name){  return !(name.indexOf(' ') >= 0);}),  //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
+			new mCommandRegistry.CommandParameter('url', 'url', messages['URL:'])
+		]); //$NON-NLS-2$ //$NON-NLS-1$ //$NON-NLS-0$
 		
 		var addRemoteCommand = new mCommands.Command({
 			name: messages["New Remote"],
@@ -2049,14 +2051,14 @@ var exports = {};
 					url += "&Path="; //$NON-NLS-0$
 					url += items[i].name;
 				}
-			} else if (data.items && data.items.Diffs) {
-				var baseLocation = data.items.Diffs[0].DiffLocation;
-				var newPath = data.items.Diffs[0].NewPath;
+			} else if (data.items && data.items.Diffs && data.items.Diffs.Children) {
+				var baseLocation = data.items.Diffs.Children[0].DiffLocation;
+				var newPath = data.items.Diffs.Children[0].NewPath;
 				url = baseLocation.substring(0, baseLocation.length - newPath.length);
 				url += "?parts=diff";  //$NON-NLS-0$
-				for (i = 0; i < data.items.Diffs.length; i++) {
+				for (i = 0; i < data.items.Diffs.Children.length; i++) {
 					url += "&Path="; //$NON-NLS-0$
-					url += data.items.Diffs[i].NewPath;
+					url += data.items.Diffs.Children[i].NewPath;
 				}
 			}
 			window.open(url);

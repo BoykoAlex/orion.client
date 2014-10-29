@@ -13,15 +13,16 @@
  ******************************************************************************/
 
 /*eslint-env browser, amd*/
-define("orion/editor/textView", [ //$NON-NLS-0$
+define("orion/editor/textView", [  //$NON-NLS-0$
 	'i18n!orion/editor/nls/messages', //$NON-NLS-0$
 	'orion/editor/textModel', //$NON-NLS-0$
 	'orion/editor/keyModes', //$NON-NLS-0$
 	'orion/editor/eventTarget', //$NON-NLS-0$
 	'orion/editor/textTheme', //$NON-NLS-0$
 	'orion/editor/util', //$NON-NLS-0$
-	'orion/util' //$NON-NLS-0$
-], function(messages, mTextModel, mKeyModes, mEventTarget, mTextTheme, textUtil, util) {
+	'orion/util', //$NON-NLS-0$
+	'orion/metrics' //$NON-NLS-0$
+], function(messages, mTextModel, mKeyModes, mEventTarget, mTextTheme, textUtil, util, mMetrics) {
 
 	/** @private */
 	function getWindow(document) {
@@ -1660,22 +1661,40 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 		 *       <li>"deleteNext" - deletes the charecter following the caret</li>
 		 *       <li>"deleteWordPrevious" - deletes the word preceding the caret</li>
 		 *       <li>"deleteWordNext" - deletes the word following the caret</li>
+		 *       <li>"deleteLineStart" - deletes characteres to the beginning of the line</li>
+		 *       <li>"deleteLineEnd" - deletes characteres to the end of the line</li>
 		 *       <li>"tab" - inserts a tab character at the caret</li>
 		 *       <li>"shiftTab" - noop</li>
-		 *       <li>"toggleTabMode" - toggles tab mode.</li>
-		 *       <li>"toggleWrapMode" - toggles wrap mode.</li>
-		 *       <li>"toggleOverwriteMode" - toggles overwrite mode.</li>
 		 *       <li>"enter" - inserts a line delimiter at the caret</li>
+		 *       <li>"uppercase" - upper case the text at the caret</li>
+		 *       <li>"lowercase" - lower case the text at the caret</li>
+		 *       <li>"capitalize" - capitilize case the text at the caret</li>
+		 *       <li>"reversecase" - reverse the case the text at the caret</li>
 		 *     </ul>
-		 *   <li>Clipboard actions.</li>
+		 *   <li>Clipboard actions. These actions modify the view text as well</li>
 		 *     <ul>
 		 *       <li>"copy" - copies the selected text to the clipboard</li>
 		 *       <li>"cut" - copies the selected text to the clipboard and deletes the selection</li>
 		 *       <li>"paste" - replaces the selected text with the clipboard contents</li>
 		 *     </ul>
+		 *   <li>Scrolling actions.</li>
+		 *     <ul>
+		 *       <li>"scrollLineUp" - scrolls the view up by one line</li>
+		 *       <li>"scrollLineDown" - scrolls the view down by one line</li>
+		 *       <li>"scrollPageUp" - scrolls the view up by one page</li>
+		 *       <li>"scrollPageDown" - scrolls the view down by one page</li>
+		 *       <li>"scrollTextStart" - scrolls the view to the beginning of the document</li>
+		 *       <li>"scrollTextEnd" - scrolls the view to the end of the document</li>
+		 *     </ul>
+		 *   <li>Mode actions.</li>
+		 *     <ul>
+		 *       <li>"toggleTabMode" - toggles tab mode.</li>
+		 *       <li>"toggleWrapMode" - toggles wrap mode.</li>
+		 *       <li>"toggleOverwriteMode" - toggles overwrite mode.</li>
+		 *     </ul>
 		 * </ul>
 		 * </p>
-		 *
+		 * 
 		 * @param {Boolean} [defaultAction=false] whether or not the predefined actions are included.
 		 * @returns {String[]} an array of action IDs defined in the text view.
 		 *
@@ -2083,6 +2102,9 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 			if (!this._clientDiv) { return; }
 			var action = this._actions[actionID];
 			if (action) {
+				if (action.actionDescription && action.actionDescription.track) {
+					mMetrics.logEvent("editor", "action invoked", action.actionDescription.id); //$NON-NLS-1$ //$NON-NLS-0$
+				}
 				if (!defaultAction && action.handler) {
 					if (action.handler(actionOptions)) {
 						return true;
@@ -3959,8 +3981,18 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 				var lineCount = this._model.getLineCount ();
 				var viewPad = this._getViewPadding();
 				var viewRect = this._viewDiv.getBoundingClientRect();
+				var lineHeight = this._getLineHeight();
+				var contentHeight = lineHeight * lineCount;
 				var trackHeight = clientHeight + viewPad.top + viewPad.bottom - 2 * this._metrics.scrollWidth;
-				lineIndex = Math.floor(((e.clientY - viewRect.top) - this._metrics.scrollWidth) * lineCount / trackHeight);
+				var divHeight, arrowWidth;
+				if (contentHeight < trackHeight) {
+					divHeight = lineHeight;
+					arrowWidth = viewPad.top;
+				} else {
+					divHeight = trackHeight / lineCount;
+					arrowWidth = this._metrics.scrollWidth;
+				}
+				lineIndex = Math.floor(((e.clientY - viewRect.top) - arrowWidth) / divHeight);
 				if (!(0 <= lineIndex && lineIndex < lineCount)) {
 					lineIndex = undefined;
 				}
@@ -5147,6 +5179,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 			if (rulerParent !== this._marginDiv || this._marginOffset) {
 				rulerParent.style.display = "block"; //$NON-NLS-0$
 			}
+			rulerParent.rulerWidth = undefined;
 			var div = util.createElement(rulerParent.ownerDocument, "div"); //$NON-NLS-0$
 			div._ruler = ruler;
 			ruler.node = div;
@@ -5362,6 +5395,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 						if (rulerParent.children.length === 0 && (rulerParent !== this._marginDiv || !this._marginOffset)) {
 							rulerParent.style.display = "none"; //$NON-NLS-0$
 						}
+						rulerParent.rulerWidth = undefined;
 						break;
 					}
 					div = div.nextSibling;
@@ -5476,10 +5510,10 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 			return Math.max(0, this._viewDiv.clientHeight - viewPad.top - viewPad.bottom);
 		},
 		_getInnerRightWidth: function() {
-			var innerRightWidth = 0;
-			if (this._innerRightDiv) {
+			var innerRightWidth = this._innerRightDiv.rulerWidth;
+			if (innerRightWidth === undefined) {
 				var innerRightRect = this._innerRightDiv.getBoundingClientRect();
-				innerRightWidth = innerRightRect.right - innerRightRect.left;
+				this._innerRightDiv.rulerWidth = innerRightWidth = innerRightRect.right - innerRightRect.left;
 			}
 			return innerRightWidth;
 		},
@@ -5489,7 +5523,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 			return Math.max(0, this._viewDiv.clientWidth - viewPad.left - viewPad.right - innerRightWidth);
 		},
 		_getClipboardText: function (event, handler) {
-			var delimiter = this._model.getLineDelimiter();
+			var delimiter = this._singleMode ? "" : this._model.getLineDelimiter();
 			var clipboadText, text;
 			// IE
 			var window = this._getWindow();
@@ -7099,7 +7133,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 
 				/* Need to set the height first in order for the width to consider the vertical scrollbar */
 				var scrollDiv = this._scrollDiv;
-				scrollDiv.style.height = scrollHeight + "px"; //$NON-NLS-0$
+				scrollDiv.style.height = (scrollHeight + (util.isWebkit ? 0 : viewPad.bottom)) + "px"; //$NON-NLS-0$
 				
 				clientWidth = this._getClientWidth();
 				if (!this._singleMode && !this._wrapMode && !this._noScroll) {
@@ -7288,6 +7322,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 				var overview = ruler.getOverview();
 				if (div.rulerChanged) {
 					applyStyle(ruler.getRulerStyle(), div);
+					divRuler.rulerWidth = undefined;
 				}
 				if (overview === "fixed") { //$NON-NLS-0$
 					div.rulerChanged = false;
@@ -7369,11 +7404,13 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 					var lineCount = this._model.getLineCount ();
 					var contentHeight = lineHeight * lineCount;
 					var trackHeight = clientHeight + viewPad.top + viewPad.bottom - 2 * this._metrics.scrollWidth;
-					var divHeight;
+					var divHeight, arrowWidth;
 					if (contentHeight < trackHeight) {
 						divHeight = lineHeight;
+						arrowWidth = viewPad.top;
 					} else {
 						divHeight = trackHeight / lineCount;
+						arrowWidth = this._metrics.scrollWidth;
 					}
 					if (div.rulerChanged) {
 						var count = div.childNodes.length;
@@ -7390,7 +7427,7 @@ define("orion/editor/textView", [ //$NON-NLS-0$
 							annotation = annotations[prop];
 							applyStyle(annotation.style, lineDiv);
 							lineDiv.style.position = "absolute"; //$NON-NLS-0$
-							lineDiv.style.top = this._metrics.scrollWidth + lineHeight + Math.floor(lineIndex * divHeight) + "px"; //$NON-NLS-0$
+							lineDiv.style.top = arrowWidth + lineHeight + Math.floor(lineIndex * divHeight) + "px"; //$NON-NLS-0$
 							if (annotation.html) {
 								lineDiv.innerHTML = annotation.html;
 							}

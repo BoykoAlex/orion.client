@@ -28,7 +28,6 @@ define([
 	
 	Objects.mixin(Visitor.prototype, /** @lends javascript.Visitor.prototype */ {
 		occurrences: [],
-		globals: [],
 		scopes: [],
 		context: null,
 		thisCheck: false,
@@ -49,7 +48,6 @@ define([
 			switch(node.type) {
 				case Estraverse.Syntax.Program:
 					this.occurrences = [];
-					this.globals = [];
 					this.scopes = [{range: node.range, occurrences: [], kind:'p'}];   //$NON-NLS-0$
 					this.defscope = null;
 					this.skipScope = null;
@@ -72,11 +70,11 @@ define([
 					}
 					break;
 				case Estraverse.Syntax.FunctionExpression:
+					if(this._enterScope(node)) {
+						return Estraverse.VisitorOption.Skip;
+					}
 					this.checkId(node.id, true); // Function expressions can be named expressions
 					if (node.params) {
-						if(this._enterScope(node)) {
-							return Estraverse.VisitorOption.Skip;
-						}
 						len = node.params.length;
 						for (idx = 0; idx < len; idx++) {
 							if(this.checkId(node.params[idx], true)) {
@@ -101,7 +99,7 @@ define([
 					this.checkId(node.object);
 					if (node.computed) { //computed = true for [], false for . notation
 						this.checkId(node.property);
-					} else if (node.object.type === Estraverse.Syntax.ThisExpression){
+					} else {
 						this.checkId(node.property, false, true);
 					}
 					break;
@@ -247,10 +245,6 @@ define([
 				switch(node.type) {
 					case Estraverse.Syntax.ObjectExpression:
 						this.scopes.push({range: node.range, occurrences: [], kind:'o'});  //$NON-NLS-0$
-						// Skip object expressions that don't contain the selection
-						if(node.range[0] > this.context.start || node.range[1] < this.context.end) {
-							return true;
-						}						
 				}
 			} else if (this.labeledStatementCheck){
 				switch(node.type) {
@@ -263,24 +257,30 @@ define([
 				}
 			} else {
 				var kind;
+				var rangeStart = node.range[0];
+				if (node.body){
+					rangeStart = node.body.range[0];
+				}
 				switch(node.type) {
 					case Estraverse.Syntax.FunctionDeclaration:
 						kind = 'fd';  //$NON-NLS-0$
+						// Include the params and body in the scope, but not the identifier
+						if (node.params && (node.params.length > 0)){
+							rangeStart = node.params[0].range[0];
+						}
 						break;
 					case Estraverse.Syntax.FunctionExpression:
 						kind = 'fe';  //$NON-NLS-0$
+						// Include the params, body and identifier (if available) See Bug 447413
+						if (node.id) {
+							rangeStart = node.id.range[0];
+						} else if (node.params && (node.params.length > 0)){
+							rangeStart = node.params[0].range[0];
+						}
 						break;
 				}
 				if (kind){
-					// Include the params and body in the scope, but not the identifier
-					var rng = node.range[0];
-					if (node.body){
-						rng = node.body.range[0];
-					}
-					if (node.params && (node.params.length > 0)){
-						rng = node.params[0].range[0];
-					}
-					this.scopes.push({range: [rng,node.range[1]], occurrences: [], kind:kind});	
+					this.scopes.push({range: [rangeStart,node.range[1]], occurrences: [], kind:kind});	
 				}
 			}
 			return false;
@@ -340,17 +340,6 @@ define([
 					}
 					case Estraverse.Syntax.Program: {
 					    this._popScope(); // pop the last scope
-					    //we are leaving the AST, add the occurrences if we never found a defining scope
-					   if(!this.defscope && this.globals) {
-					       this.occurrences = [];
-					       var that = this;
-						   this.globals.forEach(function(scope) {
-						       var occ = scope.occurrences;
-                               for(var i = 0; i < occ.length; i++) {
-                                  that.occurrences.push(occ[i]); 
-                               }						        
-						   });
-						}
 						break;
 					}
 				}
@@ -375,8 +364,9 @@ define([
 			}
 			
 			var len = scope.occurrences.length;
-			var i;
-			if(this.defscope) {
+			var i, j;
+			// Move all occurrences into the defining scope in case an inner scope redefines (Bug 448535)
+			if(this.defscope && this.defscope === scope) {
 				for(i = 0; i < len; i++) {
 					this.occurrences.push(scope.occurrences[i]);
 				}
@@ -386,7 +376,18 @@ define([
 					return true;
 				}
 			} else {
-			    this.globals.push(scope);
+				if (this.scopes.length > 0){
+					// We popped out of a scope but don't know where the define is, treat the occurrences like they belong to the outer scope (Bug 445410)
+					for (j=0; j< len; j++) {
+						this.scopes[this.scopes.length - 1].occurrences.push(scope.occurrences[j]);
+					}
+				} else {
+					// We are leaving the AST, add the occurrences if we never found a defining scope
+					this.occurrences = [];
+					for (j=0; j< len; j++) {
+						this.occurrences.push(scope.occurrences[j]);
+					}
+				}
 			}
 			return false;
 		},
@@ -441,6 +442,11 @@ define([
 						//does the scope enclose it?
 						if((scope.range[0] <= this.context.start) && (scope.range[1] >= this.context.end)) {
 							this.defscope = scope;
+						} else {
+							// Selection belongs to an outside scope so use the outside definition (Bug 447962)
+							scope.occurrences = [];
+							this.skipScope = scope;
+							return true;
 						}
 					}
 					scope.occurrences.push({
@@ -524,6 +530,10 @@ define([
 					 */
 					enter: function(node) {
 						if(node.type && node.range) {
+						    if(!next && node.type === Estraverse.Syntax.Program && offset < node.range[0]) {
+						        //https://bugs.eclipse.org/bugs/show_bug.cgi?id=447454
+						        return Estraverse.VisitorOption.Break;
+						    }
 							//only check nodes that are typed, we don't care about any others
 							if(node.range[0] <= offset) {
 								found = node;
@@ -879,8 +889,8 @@ define([
 					// The token ignores punctuators, but the node is required for context
 					// TODO Look for a more efficient way to move between node/token, see Bug 436191
 					var node = this.findNode(ctxt.selection.start, ast, {parents: true});
-					if (token.range[0] >= node.range[0] && token.range[1] <= node.range[1]){
-						if(!this._skip(node)) {
+					if(!this._skip(node)) {
+						if (token.range[0] >= node.range[0] && token.range[1] <= node.range[1]){
 							var context = {
 								start: ctxt.selection.start,
 								end: ctxt.selection.end,
@@ -988,12 +998,25 @@ define([
 				// See if a 'this' keyword was selected
 				this.visitor.thisCheck = context.token.type === Estraverse.Syntax.ThisExpression;
 				
-				// See if an object property key is selected (or a usage of an object property such as this.prop())
+				// See if we are doing an object property check
 				this.visitor.objectPropCheck = false;
 				if (parent && parent.type === Estraverse.Syntax.Property){
+					// Object property key is selected
 					this.visitor.objectPropCheck = context.token === parent.key;
-				} else if (parent && (parent.type === Estraverse.Syntax.MemberExpression && parent.object && parent.object.type === Estraverse.Syntax.ThisExpression)){
-					this.visitor.objectPropCheck = true;
+				} else if (parent && (parent.type === Estraverse.Syntax.MemberExpression)){
+					if (parent.object && parent.object.type === Estraverse.Syntax.ThisExpression){
+						// Usage of this within an object
+						this.visitor.objectPropCheck = true;
+					} else if (parent.property && context.start >= parent.property.range[0] && context.end <= parent.property.range[1]){
+					 	// Selecting the property key of a member expression
+						this.visitor.objectPropCheck = true;
+					}
+				} else if (parent && parent.type === Estraverse.Syntax.FunctionExpression && context.token.parents.length > 1 && context.token.parents[context.token.parents.length-2].type === Estraverse.Syntax.Property){
+					// Both the name and the params have the same parent
+					if (parent.id && parent.id.range === context.token.range){
+						// Named function expresison as the child of a property
+						this.visitor.objectPropCheck = true;
+					}
 				}
 				
 				// See if a labeled statement is selected
